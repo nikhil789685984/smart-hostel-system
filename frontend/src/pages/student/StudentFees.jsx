@@ -213,37 +213,15 @@ export default function StudentFees() {
   };
 
   // OFFICIAL RAZORPAY STANDARD CHECKOUT POPUP
+  // OFFICIAL RAZORPAY MOCK CHECKOUT
   const handleRazorpayCheckout = async () => {
     const numAmount = parseFloat(payAmount);
     if (isNaN(numAmount) || numAmount <= 0) {
       alert('Please enter a valid payment amount.');
       return;
     }
-
-    setProcessingPayment(true);
-    try {
-      // 1. Create Razorpay order on backend
-      const orderRes = await api.createRazorpayOrder({
-        amount: numAmount,
-        fee_id: feeData?.fee?.id,
-        fine_id: targetFine?.id,
-        payment_for: paymentTarget
-      });
-
-      if (!orderRes.success || !orderRes.order) {
-        throw new Error(orderRes.message || 'Failed to initialize Razorpay transaction order');
-      }
-
-      // 2. Bypass SDK entirely and force-open the local React Simulated Razorpay UI!
-      setShowRazorpayMock(true);
-      setRzpStatus('init');
-      setProcessingPayment(false);
-      
-    } catch (err) {
-      console.error('Razorpay checkout error:', err);
-      alert(err.message || 'Could not launch Razorpay.');
-      setProcessingPayment(false);
-    }
+    setGatewayOpen(false);
+    setShowRazorpayMock(true);
   };
 
   // Step 3: Verify OTP and commit to DB (Fallback or direct test verification)
@@ -473,7 +451,7 @@ export default function StudentFees() {
                 </span>
               </div>
               <p className="text-xs text-rose-800 mt-1">
-                Semester deadline was <strong>{fee.due_date}</strong>. A mandatory recurring late surcharge of <strong>₹50/day</strong> (Total fine: <strong>₹{Number(fee.late_fine).toLocaleString()}</strong>) has been levied on your ledger.
+                Semester deadline was <strong>{fee.due_date}</strong>. A mandatory recurring late surcharge of <strong>₹100/day</strong> (Total fine: <strong>₹{Number(fee.late_fine || ((fee.days_overdue || 1) * 100)).toLocaleString()}</strong> for {fee.days_overdue || 1} days overdue) has been levied on your ledger.
               </p>
               <p className="text-[11px] text-rose-700 font-semibold mt-0.5">
                 Clear total payable balance immediately to prevent biometric turnstile lock and gate-pass restrictions.
@@ -486,6 +464,35 @@ export default function StudentFees() {
           >
             <Zap className="w-4 h-4 fill-white" /> Settle Fine & Dues via Razorpay
           </button>
+        </motion.div>
+      )}
+
+      {/* Credit Refund / Excess Payment Banner (AC -> Non-AC room downgrade) */}
+      {paidAmount > totalAmount && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-5 rounded-3xl bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-2 border-emerald-300 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+        >
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/30 text-xl">
+              💰
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-emerald-950">Excess Ledger Credit Balance Available</h4>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white">
+                  ₹{Number(paidAmount - totalAmount).toLocaleString()} Credit
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800 mt-1">
+                Room tariff reduced after room transfer. Your excess payment of <strong>₹{Number(paidAmount - totalAmount).toLocaleString()}</strong> is safely credited in your student ledger.
+              </p>
+              <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                This credit balance will automatically adjust against your next semester fee or can be claimed as a direct bank refund.
+              </p>
+            </div>
+          </div>
         </motion.div>
       )}
 
@@ -570,7 +577,14 @@ export default function StudentFees() {
           </div>
         )}
 
-        {(pendingAmount + (fee?.late_fine || 0) + (feeData?.fines ? feeData.fines.filter(f => f.status === 'Unpaid').reduce((acc, f) => acc + (f.amount || 0), 0) : 0)) > 0 ? (
+        
+        {(() => {
+          const basePending = fee ? (fee.total_amount - fee.paid_amount) : 0;
+          const lateFine = fee?.late_fine || 0;
+          const otherFines = feeData?.fines ? feeData.fines.filter(f => f.status === 'Unpaid' && f.type !== 'Late Fee').reduce((acc, f) => acc + (f.amount || 0), 0) : 0;
+          const totalUnpaid = basePending + lateFine + otherFines;
+
+          return totalUnpaid > 0 ? (
           /* BLOCKED UI FOR PENDING DUES */
           <div className="p-5 rounded-2xl bg-gradient-to-r from-rose-50 via-amber-50 to-rose-50 border-2 border-rose-300 space-y-3">
             <div className="flex items-start gap-3">
@@ -588,21 +602,21 @@ export default function StudentFees() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/90 p-3.5 rounded-xl border border-rose-200 text-xs">
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Pending Semester Fee</span>
-                <span className="font-mono font-black text-rose-700 text-sm">₹{Number(pendingAmount).toLocaleString()}</span>
+                <span className="font-mono font-black text-rose-700 text-sm">₹{Number(basePending).toLocaleString()}</span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Late Fine Surcharge</span>
-                <span className="font-mono font-black text-rose-700 text-sm">₹{Number(fee?.late_fine || 0).toLocaleString()}</span>
+                <span className="font-mono font-black text-rose-700 text-sm">₹{Number(lateFine).toLocaleString()}</span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Disciplinary Penalties</span>
-                <span className="font-mono font-black text-rose-700 text-sm">₹{Number(feeData?.fines ? feeData.fines.filter(f => f.status === 'Unpaid').reduce((acc, f) => acc + (f.amount || 0), 0) : 0).toLocaleString()}</span>
+                <span className="font-mono font-black text-rose-700 text-sm">₹{Number(otherFines).toLocaleString()}</span>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
               <div className="text-xs text-rose-900 font-bold">
-                Total Unpaid Balance: <span className="font-mono text-sm font-black text-rose-700">₹{Number(pendingAmount + (fee?.late_fine || 0) + (feeData?.fines ? feeData.fines.filter(f => f.status === 'Unpaid').reduce((acc, f) => acc + (f.amount || 0), 0) : 0)).toLocaleString()}</span>
+                Total Unpaid Balance: <span className="font-mono text-sm font-black text-rose-700">₹{Number(totalUnpaid).toLocaleString()}</span>
               </div>
               <button
                 type="button"
@@ -613,7 +627,7 @@ export default function StudentFees() {
               </button>
             </div>
           </div>
-        ) : checkoutRequest ? (
+        ) : (checkoutRequest && ['Pending', 'Approved', 'Checked Out'].includes(checkoutRequest.status)) ? (
           /* ALREADY APPLIED / APPROVED UI */
           <div className="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-3 text-xs">
             <div className="flex items-center justify-between gap-2">
@@ -718,7 +732,8 @@ export default function StudentFees() {
               </motion.button>
             </div>
           </form>
-        )}
+        );
+        })()}
       </motion.div>
 
       {/* Fee Statement & Billing Schedule Table */}

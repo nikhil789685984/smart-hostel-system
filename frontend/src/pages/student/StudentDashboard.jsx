@@ -55,7 +55,7 @@ export default function StudentDashboard() {
     );
   }
 
-  const { student, roomInfo, roommates = [], attendance, complaints, fee, todayMenu, notices = [], gatePass } = data || {};
+  const { student, roomInfo, roommates = [], attendance, complaints, fee, todayMenu, notices = [], gatePass, latestWellness } = data || {};
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -103,34 +103,128 @@ export default function StudentDashboard() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 relative z-10">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 relative z-10 w-full md:w-auto">
           <button
             onClick={() => setIdModalOpen(true)}
-            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 text-xs font-black shadow-md shadow-amber-400/20 transition flex items-center gap-1.5 cursor-pointer"
+            className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 text-xs font-black shadow-md shadow-amber-400/20 transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
           >
-            <span>🪪</span> My Digital ID Card
+            <span>🪪</span> My Digital ID
           </button>
           <Link
             to="/student/fees"
-            className="px-4 py-2.5 rounded-2xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold border border-white/20 transition flex items-center gap-1.5"
+            className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <DoorOpen className="w-4 h-4 text-amber-300" /> Checkout
           </Link>
           <Link
             to="/student/complaints"
-            className="px-4 py-2.5 rounded-2xl bg-white hover:bg-blue-50 text-blue-800 text-xs font-black shadow-md transition flex items-center gap-1.5"
+            className="w-full sm:w-auto px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-white hover:bg-blue-50 text-blue-800 text-xs font-black shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <AlertCircle className="w-4 h-4 text-amber-500" /> + Log Complaint
           </Link>
         </div>
 
-
         {/* Ambient background blur */}
         <div className="absolute -right-10 -bottom-10 w-52 h-52 bg-white/10 rounded-full blur-3xl pointer-events-none" />
       </motion.div>
 
+      {/* Mental Health & Counselor Verification Banner */}
+      {latestWellness?.status === 'Approved' ? (
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/10 border-2 border-emerald-500/70 rounded-3xl p-5 shadow-xl shadow-emerald-500/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-sm"
+        >
+          <div className="flex items-start sm:items-center gap-3.5 relative z-10">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md text-2xl">
+              ✅
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-sm">
+                  Verified by Counselor
+                </span>
+                <span className="text-xs text-emerald-800 font-semibold">
+                  {latestWellness.approved_at ? new Date(latestWellness.approved_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Recently Verified'}
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1">
+                Your details are verified by counselor. They will call you soon.
+              </h3>
+              <p className="text-xs text-slate-700 mt-0.5">
+                Counselor <strong>{latestWellness.counselor_name || 'Dr. Nikhil Sheoran'}</strong> has reviewed your assessment with strict confidentiality. Please keep your phone reachable.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/student/wellness"
+            className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-2 whitespace-nowrap self-stretch sm:self-auto justify-center relative z-10"
+          >
+            <span>View Details</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </motion.div>
+      ) : latestWellness?.status === 'Pending' ? (
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border-2 border-amber-400/60 rounded-3xl p-4 sm:p-5 shadow-lg shadow-amber-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md text-2xl">
+              ⏳
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white">
+                  Under Counselor Review
+                </span>
+              </div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-0.5">
+                Your depression screening is being reviewed by Counselor Dr. Nikhil Sheoran.
+              </h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Details dispatched to counselor. Once verified, you will see an update here and counselor will contact you.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/student/wellness"
+            className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition flex items-center gap-2 whitespace-nowrap self-stretch sm:self-auto justify-center"
+          >
+            <span>Track Status</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </motion.div>
+      ) : (
+        <motion.div
+          variants={itemVariants}
+          className="bg-gradient-to-r from-rose-500/10 via-pink-500/10 to-indigo-500/10 border border-rose-200/60 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-600 flex items-center justify-center shrink-0 shadow-sm text-2xl">
+              🧠
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900">Free & Confidential Depression Screening Test</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500 text-white">Free • 100% Private</span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                Feeling stressed, overwhelmed, or low? Take a quick 2-minute clinical PHQ-9 self-check and request free counselor guidance.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/student/wellness"
+            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-rose-500/20 transition flex items-center gap-2 whitespace-nowrap self-stretch sm:self-auto justify-center"
+          >
+            <span>Take Test Free</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </motion.div>
+      )}
+
       {/* KPI Cards Grid */}
-      <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         <StatCard
           title="Assigned Bed"
           value={roomInfo ? `${roomInfo.room_number} (${roomInfo.bed_number})` : 'Unassigned'}
@@ -216,6 +310,63 @@ export default function StudentDashboard() {
                     Special Treat: {todayMenu.special_item}
                   </span>
                 )}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Assigned Caretaker / Resident Warden Card */}
+          <motion.div
+            variants={itemVariants}
+            className="glass-card rounded-3xl p-6 border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-purple-50/60 shadow-sm space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600/10 text-indigo-700 flex items-center justify-center text-xl">
+                  🛡️
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Assigned Caretaker & Resident Warden</h3>
+                  <p className="text-xs text-indigo-700 font-semibold">Your designated campus welfare officer</p>
+                </div>
+              </div>
+              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200/80">
+                Active Supervision
+              </span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/90 border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-md shadow-indigo-600/20">
+                  {(student?.caretaker_name || 'C')[0]}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-sm font-black text-slate-900">{student?.caretaker_name || 'Resident Caretaker'}</h4>
+                    {student?.caretaker_staff_id && (
+                      <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
+                        {student.caretaker_staff_id}
+                      </span>
+                    )}
+                    {student?.caretaker_shift && (
+                      <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100">
+                        {student.caretaker_shift}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium mt-0.5">{student?.caretaker_role || 'Facility Caretaker & Room Support'}</p>
+                  <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                    <span>📍 Assigned: {student?.caretaker_block || student?.block_name || 'Resident Block'}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <a
+                  href={student?.caretaker_phone ? `tel:${student.caretaker_phone}` : '#'}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <span>📞</span> Call Caretaker
+                </a>
               </div>
             </div>
           </motion.div>
@@ -363,11 +514,13 @@ export default function StudentDashboard() {
 
       </div>
 
-      <DigitalIDCard
-        student={student ? { ...student, name: user?.name, avatar_url: user?.avatar_url } : user}
-        isOpen={idModalOpen}
-        onClose={() => setIdModalOpen(false)}
-      />
+      {idModalOpen && (
+        <DigitalIDCard
+          student={student ? { ...student, name: user?.name, avatar_url: user?.avatar_url } : user}
+          isOpen={idModalOpen}
+          onClose={() => setIdModalOpen(false)}
+        />
+      )}
 
     </motion.div>
   );

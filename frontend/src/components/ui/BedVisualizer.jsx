@@ -50,7 +50,7 @@ export default function BedVisualizer({ rooms = [], onSelectBed, isWarden = fals
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.25, delay: rIdx * 0.04 }}
+                transition={{ duration: 0.1 }}
                 whileHover={{ y: -4 }}
                 className={`glass-card rounded-3xl p-6 border transition-all duration-300 relative overflow-hidden shadow-sm hover:shadow-xl ${
                   isMaintenance

@@ -114,16 +114,16 @@ export default function WardenDashboard() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
             <Link
               to="/warden/students"
-              className="px-4 py-2.5 rounded-xl bg-white text-purple-900 text-xs font-black shadow-lg hover:bg-purple-50 transition flex items-center gap-1.5"
+              className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-white text-purple-900 text-xs font-black shadow-lg hover:bg-purple-50 transition flex items-center justify-center gap-1.5"
             >
-              <Users className="w-4 h-4 text-purple-700" /> Student Directory & Checkout
+              <Users className="w-4 h-4 text-purple-700" /> Student Directory
             </Link>
             <Link
               to="/warden/allocations"
-              className="px-4 py-2.5 rounded-xl bg-purple-500/30 border border-purple-400/40 text-purple-100 text-xs font-black hover:bg-purple-500/50 transition flex items-center gap-1.5 backdrop-blur-md"
+              className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-purple-500/30 border border-purple-400/40 text-purple-100 text-xs font-black hover:bg-purple-500/50 transition flex items-center justify-center gap-1.5 backdrop-blur-md"
             >
               <Bed className="w-4 h-4 text-amber-300" /> Bed Allocator
             </Link>
@@ -132,7 +132,7 @@ export default function WardenDashboard() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         <StatCard
           title="Total Residents"
           value={stats?.totalStudents || 120}

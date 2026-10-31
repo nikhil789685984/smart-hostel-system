@@ -41,6 +41,34 @@ function playNotificationChime() {
   }
 }
 
+
+const playNotificationSound = () => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    // Create a pleasant, soft double-chime
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+    
+    gainNode.gain.setValueAtTime(0, ctx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (err) {
+    console.error('Audio play failed', err);
+  }
+};
+
 export default function NotificationDropdown() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -238,7 +266,7 @@ export default function NotificationDropdown() {
 
       {/* Popover Dropdown Drawer */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+        <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96 max-w-md mx-auto sm:mx-0 bg-white rounded-3xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
           
           {/* Header */}
           <div className="p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white flex items-center justify-between">
@@ -348,9 +376,12 @@ export default function NotificationDropdown() {
                       </p>
 
                       {notif.link && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 mt-1 hover:underline">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleItemClick(notif); }}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 mt-1 hover:underline cursor-pointer"
+                        >
                           View details <ExternalLink className="w-2.5 h-2.5" />
-                        </span>
+                        </button>
                       )}
                     </div>
 

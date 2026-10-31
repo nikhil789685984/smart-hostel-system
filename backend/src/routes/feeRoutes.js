@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import {
+  getAIDefaulterAnalysis,
+  sendTargetedDefaulterAlert,
   getMyFees,
   mockPayFee,
   getAllFees,
   assessAllLateFines,
+  assessIndividualLateFine,
   getAllFines,
   waiveFine,
   issueDisciplinaryFine,
@@ -29,10 +32,15 @@ router.get('/all', requireRole(['warden', 'admin']), getAllFees);
 router.get('/fines', requireRole(['warden', 'admin']), getAllFines);
 router.post('/fines/issue', requireRole(['warden', 'admin']), issueDisciplinaryFine);
 router.post('/assess-fines', requireRole(['warden', 'admin']), assessAllLateFines);
-router.patch('/fines/:id/waive', requireRole(['admin']), waiveFine);
+router.post('/assess-individual-fine/:studentId', requireRole(['warden', 'admin']), assessIndividualLateFine);
+router.patch('/fines/:id/waive', requireRole(['warden', 'admin']), waiveFine);
 
 // Overdue Fee & Late Fine Alerts
 router.post('/alert-defaulters', requireRole(['warden', 'admin']), sendFeeAlertToAllDefaulters);
 router.post('/alert-student/:studentId', requireRole(['warden', 'admin']), sendFeeAlertToStudent);
+
+// AI Defaulter Audit Routes
+router.get('/ai-defaulters', requireRole(['warden', 'admin']), getAIDefaulterAnalysis);
+router.post('/alert-targeted-defaulters', requireRole(['warden', 'admin']), sendTargetedDefaulterAlert);
 
 export default router;

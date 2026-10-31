@@ -224,69 +224,36 @@ function addRoomWithBeds(blockId, roomNum, floor, capacity, roomType, fee, defau
   for (let b = 1; b <= capacity; b++) {
     const currentBedId = bedIdCounter++;
     insertBed.run(currentBedId, currentRoomId, `Bed-${b}`, 'vacant');
-    roomBeds.push({ id: currentBedId, roomId: currentRoomId, bedNum: `Bed-${b}` });
-    allBeds.push({ id: currentBedId, roomId: currentRoomId, bedNum: `Bed-${b}` });
+    roomBeds.push({ id: currentBedId, roomId: currentRoomId, bedNum: `Bed-${b}`, blockId, floor });
+    allBeds.push({ id: currentBedId, roomId: currentRoomId, bedNum: `Bed-${b}`, blockId, floor });
   }
   return roomBeds;
 }
 
-// Block 1 (Aryabhata - Boys, 10 rooms, 20 beds)
-for (let i = 1; i <= 10; i++) {
-  const roomNum = `A-${100 + i}`;
-  const floor = i <= 4 ? 1 : i <= 7 ? 2 : 3;
-  const isAc = i % 2 === 1;
-  addRoomWithBeds(1, roomNum, floor, 2, isAc ? 'AC' : 'Non-AC', isAc ? 42000 : 35000);
+// Dynamically Generate 900 Beds (450 Boys, 450 Girls) across 7 Blocks
+const boysBlocks = [1, 2, 3, 4];
+const girlsBlocks = [5, 6, 7];
+
+// Distribute 150 rooms (3 beds each) for boys
+for (let i = 1; i <= 150; i++) {
+  const blockId = boysBlocks[i % boysBlocks.length];
+  const floor = Math.ceil((i % 50) / 10) || 1; 
+  const roomNum = `H-${blockId}-${floor}0${i % 10}`;
+  const isAc = i % 3 === 0;
+  addRoomWithBeds(blockId, roomNum, floor, 3, isAc ? 'AC' : 'Non-AC', isAc ? 45000 : 38000);
 }
 
-// Block 2 (Bhaskara - Boys, 10 rooms, 20 beds)
-for (let i = 1; i <= 10; i++) {
-  const roomNum = `B-${200 + i}`;
-  const floor = i <= 4 ? 1 : i <= 7 ? 2 : 3;
-  const isDeluxe = i === 4 || i === 5;
-  addRoomWithBeds(2, roomNum, floor, 2, isDeluxe ? 'Deluxe' : (i % 2 === 0 ? 'AC' : 'Non-AC'), isDeluxe ? 48000 : (i % 2 === 0 ? 42000 : 35000));
+// Distribute 150 rooms (3 beds each) for girls
+for (let i = 1; i <= 150; i++) {
+  const blockId = girlsBlocks[i % girlsBlocks.length];
+  const floor = Math.ceil((i % 50) / 10) || 1; 
+  const roomNum = `N-${blockId}-${floor}0${i % 10}`;
+  const isAc = i % 3 === 0;
+  addRoomWithBeds(blockId, roomNum, floor, 3, isAc ? 'AC' : 'Non-AC', isAc ? 45000 : 38000);
 }
 
-// Block 3 (Charaka - Boys, 10 rooms, 30 beds - 3 sharing)
-for (let i = 1; i <= 10; i++) {
-  const roomNum = `C-${300 + i}`;
-  const floor = i <= 4 ? 1 : i <= 7 ? 2 : 3;
-  addRoomWithBeds(3, roomNum, floor, 3, 'Non-AC', 30000);
-}
-
-// Block 4 (Ramanujan - Boys, 8 rooms, 16 beds)
-for (let i = 1; i <= 8; i++) {
-  const roomNum = `D-${100 + i}`;
-  const floor = i <= 4 ? 1 : 2;
-  addRoomWithBeds(4, roomNum, floor, 2, 'AC', 42000);
-}
-
-// Block 5 (Gargi - Girls, 10 rooms, 20 beds)
-for (let i = 1; i <= 10; i++) {
-  const roomNum = `G-${100 + i}`;
-  const floor = i <= 4 ? 1 : i <= 7 ? 2 : 3;
-  const isAc = i % 2 === 1;
-  addRoomWithBeds(5, roomNum, floor, 2, isAc ? 'AC' : 'Non-AC', isAc ? 42000 : 35000);
-}
-
-// Block 6 (Maitreyi - Girls, 8 rooms, 16 beds)
-for (let i = 1; i <= 8; i++) {
-  const roomNum = `M-${200 + i}`;
-  const floor = i <= 4 ? 1 : 2;
-  addRoomWithBeds(6, roomNum, floor, 2, 'AC', 42000);
-}
-
-// Block 7 (Sarojini - Girls, 9 rooms, 24 beds - mix 2 & 3 sharing)
-for (let i = 1; i <= 9; i++) {
-  const roomNum = `S-${300 + i}`;
-  const floor = i <= 3 ? 1 : i <= 6 ? 2 : 3;
-  const cap = i > 6 ? 3 : 2;
-  addRoomWithBeds(7, roomNum, floor, cap, 'Non-AC', cap === 3 ? 30000 : 35000);
-}
-
-console.log(`Created ${roomIdCounter - 1} rooms and ${allBeds.length} beds total.`);
-
-// 5. Generate 115 Students
-console.log('Generating 115 Realistic Students...');
+// 5. Generate 800 Students
+console.log('Generating 800 Realistic Students...');
 const FIRST_NAMES_BOYS = [
   'Aarav', 'Rohan', 'Kabir', 'Aditya', 'Ishaan', 'Arjun', 'Dev', 'Karthik',
   'Siddharth', 'Yash', 'Rahul', 'Aman', 'Varun', 'Gaurav', 'Nikhil', 'Ayush',
@@ -330,8 +297,8 @@ const BRANCHES = [
 const BLOOD_GROUPS = ['A+', 'B+', 'O+', 'AB+', 'A-', 'B-', 'O-'];
 
 const insertStudent = db.prepare(`
-  INSERT INTO students (id, user_id, roll_number, course, branch, year, semester, blood_group, parent_name, parent_phone, emergency_contact, checkin_date, status)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO students (id, user_id, roll_number, course, branch, year, semester, blood_group, parent_name, parent_phone, emergency_contact, checkin_date, status, caretaker_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const insertAllocation = db.prepare(`
   INSERT INTO room_allocations (id, student_id, bed_id, allocated_from, status)
@@ -354,7 +321,7 @@ let allocationIdCounter = 1;
 let feeIdCounter = 1;
 
 // Target: 115 students (70 boys, 45 girls)
-const TOTAL_STUDENTS = 115;
+const TOTAL_STUDENTS = 800;
 
 for (let sIdx = 1; sIdx <= TOTAL_STUDENTS; sIdx++) {
   const currentUserId = userIdCounter++;
@@ -367,14 +334,14 @@ for (let sIdx = 1; sIdx <= TOTAL_STUDENTS; sIdx++) {
     name = 'Aarav Sharma';
     email = 'student@hostel.com';
     isGirl = false;
-  } else if (sIdx <= 70) {
+  } else if (sIdx <= 500) {
     const fName = FIRST_NAMES_BOYS[(sIdx - 1) % FIRST_NAMES_BOYS.length];
     const lName = LAST_NAMES[(sIdx * 3) % LAST_NAMES.length];
     name = `${fName} ${lName}`;
     email = `${fName.toLowerCase()}.${lName.toLowerCase()}${sIdx}@hostel.com`;
     isGirl = false;
   } else {
-    const fName = FIRST_NAMES_GIRLS[(sIdx - 71) % FIRST_NAMES_GIRLS.length];
+    const fName = FIRST_NAMES_GIRLS[(sIdx - 501) % FIRST_NAMES_GIRLS.length];
     const lName = LAST_NAMES[(sIdx * 2) % LAST_NAMES.length];
     name = `${fName} ${lName}`;
     email = `${fName.toLowerCase()}.${lName.toLowerCase()}${sIdx}@hostel.com`;
@@ -406,6 +373,32 @@ for (let sIdx = 1; sIdx <= TOTAL_STUDENTS; sIdx++) {
   const parentName = `Mr. Rajesh ${LAST_NAMES[(sIdx * 3) % LAST_NAMES.length]}`;
   const parentPhone = `+91 94${Math.floor(100 + Math.random() * 899)} ${Math.floor(10000 + Math.random() * 89999)}`;
 
+  // Determine Allocated Bed first
+  let assignedBedId = sIdx;
+  if (sIdx === 1) {
+    // Room B-204 is room 14
+    assignedBedId = 27; // Bed 27 is B-204 Bed-1
+  } else if (sIdx === 2) {
+    assignedBedId = 28; // B-204 Bed-2
+  } else if (sIdx === 27 || sIdx === 28) {
+    assignedBedId = allBeds.length - sIdx; // Swap to avoid collision
+  }
+
+  const assignedBed = allBeds.find(b => b.id === assignedBedId) || allBeds[assignedBedId - 1];
+  let caretakerId = 1;
+  if (assignedBed) {
+    const { blockId, floor } = assignedBed;
+    if (blockId === 1) caretakerId = floor === 1 ? 1 : (floor <= 3 ? 15 : 4);
+    else if (blockId === 2) caretakerId = floor <= 2 ? 9 : 3;
+    else if (blockId === 3) caretakerId = floor <= 2 ? 5 : 11;
+    else if (blockId === 4) caretakerId = floor <= 2 ? 7 : 13;
+    else if (blockId === 5) caretakerId = floor <= 2 ? 2 : 10;
+    else if (blockId === 6) caretakerId = floor <= 2 ? 12 : 6;
+    else if (blockId === 7) caretakerId = floor <= 2 ? 14 : 8;
+  } else {
+    caretakerId = isGirl ? 2 : 1;
+  }
+
   insertStudent.run(
     currentStudentId,
     currentUserId,
@@ -419,20 +412,9 @@ for (let sIdx = 1; sIdx <= TOTAL_STUDENTS; sIdx++) {
     parentPhone,
     parentPhone,
     '2024-08-01',
-    'active'
+    'active',
+    caretakerId
   );
-
-  // Allocate Bed
-  // If sIdx === 1 (Aarav), place in Room B-204 Bed-1 (Room 14, Bed 27)
-  let assignedBedId = sIdx;
-  if (sIdx === 1) {
-    // Room B-204 is room 14
-    assignedBedId = 27; // Bed 27 is B-204 Bed-1
-  } else if (sIdx === 2) {
-    assignedBedId = 28; // B-204 Bed-2
-  } else if (sIdx === 27 || sIdx === 28) {
-    assignedBedId = allBeds.length - sIdx; // Swap to avoid collision
-  }
 
   insertAllocation.run(
     allocationIdCounter++,
@@ -704,4 +686,4 @@ for (const [dt, st, rem] of attendanceDates) {
 
 db.pragma('foreign_keys = ON');
 
-console.log('✅ DATABASE FULLY SEEDED WITH 115 STUDENTS, 10 WARDENS, 150 BEDS, 65 ROOMS, AND 100+ TRANSACTIONS!');
+console.log('✅ DATABASE FULLY SEEDED WITH 800 STUDENTS, 10 WARDENS, 900 BEDS, 300 ROOMS, AND 100+ TRANSACTIONS!');

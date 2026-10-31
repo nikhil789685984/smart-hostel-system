@@ -13,16 +13,52 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment & local DB files
+# Environment & credentials
 .env
-.env.local
-.DS_Store
+.env.*
+backend/.env
+backend/.env.*
+
+# Local DB files
 *.db-journal
 *.db-wal
 *.db-shm
+backend/hostel.db
+
+# Uploads and temporary media
+uploads/
+backend/uploads/
+*.mp4
+*.opus
+
+# Scratch scripts & temporary tests
+scratch/
+*.py
+*.sql
+*.cjs
+test*.js
+test-*.js
+patch*.js
+fix*.js
+alter*.js
+check*.js
+make*.js
+upgrade*.js
+revert*.js
+setup*.js
+update*.js
+backend/test_*.js
+backend/patch_*.js
+backend/cleanup_*.js
+backend/fix_*.js
+backend/seed_700_students.js
+backend/seed_more_wardens.js
+backend/alter_db.cjs
+backend/update_images.cjs
 
 # IDE / Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+.DS_Store

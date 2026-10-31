@@ -25,7 +25,13 @@ export default function ManageRooms() {
         setLoading(false);
       }
     }
+    
+    // Load immediately
     loadHostels();
+    
+    // Auto-refresh every 10 seconds for real-time live updates
+    const interval = setInterval(loadHostels, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -88,27 +94,31 @@ export default function ManageRooms() {
                   </div>
                 </div>
 
-                {/* Progress Bar */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
-                    <span>{h.occupied_beds || 0} Occupied</span>
-                    <span>{h.vacant_beds || 0} Vacant</span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full bg-blue-600 rounded-full transition-all"
-                      style={{ width: `${occupancyPct}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Contact Desk: <strong className="text-slate-800">{h.contact_phone}</strong></span>
-                  <span className="text-emerald-700 font-bold">24/7 Security Gate</span>
+                {/* Block Breakdowns */}
+                <div className="mt-4 space-y-3 border-t border-slate-100 pt-3">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-blue-500" /> Block-wise Allocation</h4>
+                  {(h.blocks || []).map(blk => {
+                    const blkOccupancy = blk.total_beds > 0 ? Math.round((blk.occupied_beds / blk.total_beds) * 100) : 0;
+                    return (
+                      <div key={blk.id} className="bg-slate-50 border border-slate-200/60 p-3 rounded-xl">
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <span className="font-bold text-slate-800">{blk.block_name}</span>
+                          <span className="font-bold text-blue-600">{blkOccupancy}% Full</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden mb-1.5">
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${blkOccupancy}%` }}></div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold">
+                          <span>{blk.total_rooms} Rooms</span>
+                          <span>{blk.occupied_beds || 0} / {blk.total_beds || 0} Beds Occupied</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
-          })}
+          }) }
         </div>
       )}
 

@@ -1,5 +1,45 @@
 import { get, all, run } from '../database/db.js';
-import { createNotification } from './notificationController.js';
+import { createNotification, createBroadcastNotification } from './notificationController.js';
+
+export function getCaretakerIdForLocation(blockName, floor, gender, studentId) {
+  if (blockName === 'Block A (Aryabhata)') {
+    if (floor === 1) return 1; // Ramesh Kumar (Ground & 1st Floor)
+    if (floor === 2 || floor === 3) return 15; // Harish Chandra (2nd & 3rd Floor)
+    return 4; // Anil Sharma (Night / Upper Floors)
+  }
+  if (blockName === 'Block A (Gargi)') {
+    if (floor <= 2) return 2; // Sunita Devi (Ground & 1st Floor)
+    return 10; // Pooja Sharma (2nd & 3rd Floor, Upper)
+  }
+  if (blockName === 'Block B (Bhaskara)') {
+    if (floor <= 2) return 9; // Vikramjit Singh (Ground Floor)
+    return 3; // Mohan Singh (1st & 2nd Floor, Upper)
+  }
+  if (blockName === 'Block B (Maitreyi)') {
+    if (floor <= 2) return 12; // Meena Devi (Ground Floor)
+    return 6; // Anita Verma (All Floors)
+  }
+  if (blockName === 'Block C (Charaka)') {
+    if (floor <= 2) return 5; // Suresh Yadav (Ground & 1st Floor)
+    return 11; // Dharmendra Pal (Night / Upper Floors)
+  }
+  if (blockName === 'Block C (Sarojini)') {
+    if (floor <= 2) return 14; // Sarita Joshi (1st & 2nd Floor)
+    return 8; // Geeta Rani (All Floors)
+  }
+  if (blockName === 'Block D (Ramanujan)') {
+    if (floor <= 2) return 7; // Rajendra Prasad (Ground & 1st Floor)
+    return 13; // Santosh Kumar (2nd Floor, Upper)
+  }
+  if (gender === 'Female' || gender === 'female') {
+    const femaleCaretakers = [2, 6, 8, 10, 12, 14];
+    return femaleCaretakers[(studentId || 1) % femaleCaretakers.length];
+  } else {
+    const maleCaretakers = [1, 3, 4, 5, 7, 9, 11, 13, 15];
+    return maleCaretakers[(studentId || 1) % maleCaretakers.length];
+  }
+}
+
 
 export async function getOverview(req, res) {
   try {
@@ -159,7 +199,7 @@ export async function allocateBed(req, res) {
     }
 
     const bed = await get(`
-      SELECT b.*, r.room_number, COALESCE(blk.name, 'Main Block') as block_name
+      SELECT b.*, r.room_number, r.floor, COALESCE(blk.name, 'Main Block') as block_name
       FROM beds b
       JOIN rooms r ON r.id = b.room_id
       LEFT JOIN blocks blk ON blk.id = r.block_id
@@ -186,8 +226,9 @@ export async function allocateBed(req, res) {
     // Update bed status to occupied
     await run("UPDATE beds SET status = 'occupied' WHERE id = ?", [bedId]);
 
-    // Set student status to active
-    await run("UPDATE students SET status = 'active' WHERE id = ?", [studentId]);
+    // Assign appropriate block/floor caretaker and set status to active
+    const caretakerId = getCaretakerIdForLocation(bed.block_name, bed.floor, student.gender, studentId);
+    await run("UPDATE students SET status = 'active', caretaker_id = ? WHERE id = ?", [caretakerId, studentId]);
 
     // Check if all beds in room are occupied to update room status
     const remainingVacant = await get("SELECT COUNT(*) as count FROM beds WHERE room_id = ? AND status = 'vacant'", [bed.room_id]);
@@ -296,7 +337,18 @@ export async function requestRoomChange(req, res) {
       VALUES (?, ?, ?, ?, ?, 'Pending')
     `, [student.id, currentAllocation.bed_id, preferred_block, preferred_room_type || 'AC', reason]);
 
+    
+    try {
+      await createBroadcastNotification(
+        ['warden', 'admin'],
+        '🛏️ Room Change Request',
+        `A student has requested a room change to ${preferred_block} (${preferred_room_type || 'AC'}). Reason: ${reason}`,
+        'notice',
+        '/warden/rooms'
+      );
+    } catch(e) {}
     res.status(201).json({ success: true, message: 'Room change request submitted for Warden review.' });
+  
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -328,10 +380,100 @@ export async function getRoomChangeRequests(req, res) {
 export async function updateRoomChangeRequest(req, res) {
   try {
     const { id } = req.params;
-    const { status, warden_notes } = req.body;
+    const { status, warden_notes, target_bed_id } = req.body;
 
     if (!['Approved', 'Rejected'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Status must be Approved or Rejected.' });
+    }
+
+    const request = await get('SELECT * FROM room_change_requests WHERE id = ?', [id]);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Room change request not found.' });
+    }
+
+    let allocatedBedInfo = null;
+
+    if (status === 'Approved') {
+      let targetBed = null;
+
+      if (target_bed_id) {
+        targetBed = await get(`
+          SELECT b.*, r.room_number, r.floor, r.room_type, r.fee_per_semester, COALESCE(blk.name, 'Main Block') as block_name 
+          FROM beds b 
+          JOIN rooms r ON r.id = b.room_id 
+          LEFT JOIN blocks blk ON blk.id = r.block_id 
+          WHERE b.id = ? AND b.status = 'vacant'
+        `, [target_bed_id]);
+      }
+
+      if (!targetBed && request.preferred_block) {
+        targetBed = await get(`
+          SELECT b.*, r.room_number, r.floor, r.room_type, r.fee_per_semester, COALESCE(blk.name, 'Main Block') as block_name
+          FROM beds b
+          JOIN rooms r ON r.id = b.room_id
+          LEFT JOIN blocks blk ON blk.id = r.block_id
+          WHERE b.status = 'vacant' AND blk.name LIKE ?
+          LIMIT 1
+        `, [`%${request.preferred_block}%`]);
+      }
+
+      if (!targetBed) {
+        targetBed = await get(`
+          SELECT b.*, r.room_number, r.floor, r.room_type, r.fee_per_semester, COALESCE(blk.name, 'Main Block') as block_name
+          FROM beds b
+          JOIN rooms r ON r.id = b.room_id
+          LEFT JOIN blocks blk ON blk.id = r.block_id
+          WHERE b.status = 'vacant'
+          LIMIT 1
+        `);
+      }
+
+      if (targetBed) {
+        // 1. Vacate old bed
+        if (request.current_bed_id) {
+          const oldBed = await get('SELECT room_id FROM beds WHERE id = ?', [request.current_bed_id]);
+          await run("UPDATE room_allocations SET status = 'transferred', allocated_to = CURRENT_DATE WHERE student_id = ? AND status = 'active'", [request.student_id]);
+          await run("UPDATE beds SET status = 'vacant' WHERE id = ?", [request.current_bed_id]);
+          if (oldBed) {
+            await run("UPDATE rooms SET status = 'available' WHERE id = ?", [oldBed.room_id]);
+          }
+        }
+
+        // 2. Allocate new bed to student
+        await run("UPDATE room_allocations SET status = 'transferred' WHERE student_id = ? AND status = 'active'", [request.student_id]);
+        await run(`
+          INSERT INTO room_allocations (student_id, bed_id, allocated_from, status)
+          VALUES (?, ?, CURRENT_DATE, 'active')
+        `, [request.student_id, targetBed.id]);
+
+        // 3. Mark new bed occupied
+        await run("UPDATE beds SET status = 'occupied' WHERE id = ?", [targetBed.id]);
+        
+        // 4. Update room status if all beds occupied
+        const remainingVacant = await get("SELECT COUNT(*) as count FROM beds WHERE room_id = ? AND status = 'vacant'", [targetBed.room_id]);
+        if (remainingVacant.count === 0) {
+          await run("UPDATE rooms SET status = 'full' WHERE id = ?", [targetBed.room_id]);
+        }
+
+        // 5. Sync student semester fee & calculate tariff difference (AC Upgrade vs Non-AC Downgrade)
+        if (targetBed.fee_per_semester) {
+          const newTotal = Number(targetBed.fee_per_semester);
+          const currentFee = await get("SELECT * FROM fees WHERE student_id = ?", [request.student_id]);
+          if (currentFee) {
+            const alreadyPaid = Number(currentFee.paid_amount || 0);
+            const newPending = Math.max(0, Number((newTotal - alreadyPaid).toFixed(2)));
+            const newStatus = newPending === 0 ? 'Paid' : (alreadyPaid > 0 ? 'Partial' : 'Unpaid');
+            await run("UPDATE fees SET total_amount = ?, pending_amount = ?, status = ? WHERE id = ?", [newTotal, newPending, newStatus, currentFee.id]);
+          }
+        }
+
+        // 6. Update student's caretaker according to new block and floor
+        const studentObj = await get('SELECT id, gender FROM students WHERE id = ?', [request.student_id]);
+        const caretakerId = getCaretakerIdForLocation(targetBed.block_name, targetBed.floor, studentObj?.gender, request.student_id);
+        await run("UPDATE students SET caretaker_id = ? WHERE id = ?", [caretakerId, request.student_id]);
+
+        allocatedBedInfo = targetBed;
+      }
     }
 
     await run(`
@@ -340,7 +482,43 @@ export async function updateRoomChangeRequest(req, res) {
       WHERE id = ?
     `, [status, warden_notes || null, id]);
 
-    res.json({ success: true, message: `Room change request ${status.toLowerCase()} successfully.` });
+    try {
+      const studentInfo = await get('SELECT user_id, name FROM students WHERE id = ?', [request.student_id]);
+      if (studentInfo) {
+        const feeRecord = await get('SELECT total_amount, paid_amount, pending_amount FROM fees WHERE student_id = ?', [request.student_id]);
+        let diffNote = '';
+        if (feeRecord) {
+          if (feeRecord.pending_amount > 0) {
+            diffNote = ` (Remaining tariff difference to pay: ₹${Number(feeRecord.pending_amount).toLocaleString()})`;
+          } else if (feeRecord.paid_amount > feeRecord.total_amount) {
+            const creditRefund = Number((feeRecord.paid_amount - feeRecord.total_amount).toFixed(2));
+            diffNote = ` (Excess payment of ₹${creditRefund.toLocaleString()} credited to your student ledger / refundable)`;
+          }
+        }
+
+        const notifMsg = status === 'Approved'
+          ? (allocatedBedInfo 
+              ? `Your room change request has been approved! You have been transferred to Room ${allocatedBedInfo.room_number} (${allocatedBedInfo.bed_number}) in ${allocatedBedInfo.block_name}${diffNote}.`
+              : 'Your room change request has been approved! Please collect your new room keys from the warden office.')
+          : 'Your room change request was reviewed and rejected by the warden.';
+
+        await createNotification(
+          studentInfo.user_id,
+          status === 'Approved' ? '✅ Room Change Approved & Transferred' : '❌ Room Change Rejected',
+          notifMsg,
+          status === 'Approved' ? 'success' : 'error',
+          '/student/fees'
+        );
+      }
+    } catch(e) {}
+
+    res.json({ 
+      success: true, 
+      message: status === 'Approved' && allocatedBedInfo 
+        ? `Room change request approved and student transferred to Room ${allocatedBedInfo.room_number} (${allocatedBedInfo.bed_number}).`
+        : `Room change request ${status.toLowerCase()} successfully.` 
+    });
+
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

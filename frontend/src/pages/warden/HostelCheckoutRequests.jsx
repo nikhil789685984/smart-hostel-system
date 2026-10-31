@@ -1,34 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../services/api';
-import Modal from '../../components/ui/Modal';
 import {
-  DoorOpen,
-  CheckCircle2,
-  AlertCircle,
-  AlertTriangle,
-  Search,
-  Filter,
-  UserCheck,
-  Building,
-  Bed,
-  Calendar,
-  CreditCard,
-  ShieldCheck,
-  Clock,
-  LogOut,
-  FileText,
-  Check,
-  X,
-  Zap,
-  RefreshCw
+  DoorOpen, CheckCircle2, AlertTriangle, Search, 
+  Building, Bed, Calendar, CreditCard, ShieldCheck, 
+  Clock, FileText, Check, X, ShieldAlert, BadgeCheck
 } from 'lucide-react';
 
 export default function HostelCheckoutRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('Pending'); // 'All' | 'Pending' | 'Approved' | 'Rejected'
+  const [activeTab, setActiveTab] = useState('Pending');
   const [msg, setMsg] = useState(null);
   const [processingId, setProcessingId] = useState(null);
   const [remarksMap, setRemarksMap] = useState({});
@@ -62,35 +44,30 @@ export default function HostelCheckoutRequests() {
 
     setProcessingId(requestId);
     try {
-      const res = await api.processCheckoutRequest(requestId, {
-        action,
-        remarks
-      });
-
-      setMsg(res.message);
+      const res = await api.processCheckoutRequest(requestId, { action, remarks });
+      setMsg({ type: 'success', text: res.message });
       setTimeout(() => setMsg(null), 5000);
       fetchRequests();
     } catch (err) {
-      alert(err.message || `Failed to ${action.toLowerCase()} checkout request`);
+      setMsg({ type: 'error', text: err.message || `Failed to ${action.toLowerCase()} request` });
+      setTimeout(() => setMsg(null), 5000);
     } finally {
       setProcessingId(null);
     }
   };
 
-  // Filter requests
   const filteredRequests = requests.filter(req => {
+    const q = search.toLowerCase();
     const matchesSearch = (
-      req.student_name?.toLowerCase().includes(search.toLowerCase()) ||
-      req.roll_number?.toLowerCase().includes(search.toLowerCase()) ||
-      req.room_number?.toLowerCase().includes(search.toLowerCase()) ||
-      req.block_name?.toLowerCase().includes(search.toLowerCase())
+      req.student_name?.toLowerCase().includes(q) ||
+      req.roll_number?.toLowerCase().includes(q) ||
+      req.room_number?.toLowerCase().includes(q) ||
+      req.block_name?.toLowerCase().includes(q)
     );
-
     if (activeTab === 'All') return matchesSearch;
     return matchesSearch && req.status === activeTab;
   });
 
-  // Summary Metrics
   const pendingCount = requests.filter(r => r.status === 'Pending').length;
   const approvedCount = requests.filter(r => r.status === 'Approved').length;
   const rejectedCount = requests.filter(r => r.status === 'Rejected').length;
@@ -98,335 +75,264 @@ export default function HostelCheckoutRequests() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <div className="w-10 h-10 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
-        <span className="text-xs text-slate-400 font-extrabold uppercase tracking-wider">Loading Hostel Clearance Console...</span>
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto space-y-8 font-sans pb-10">
       
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-indigo-500/20 backdrop-blur border border-indigo-400/30 text-[10px] font-black uppercase tracking-wider text-indigo-200 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-300" />
-                Institutional No-Dues & Room Vacate Clearance Engine
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Hostel Checkout Clearance & Approval Hub</h1>
-            <p className="text-xs text-indigo-200/80 max-w-2xl font-medium">
-              Warden room inspection portal, zero-dues financial verification, bed de-allocation console, and automated exit certificate generation.
+      {/* 🌌 Premium Header Banner */}
+      <div className="relative overflow-hidden p-8 rounded-[2.5rem] shadow-2xl border flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-950 border-slate-800">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500 blur-3xl opacity-20 rounded-full"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500 blur-3xl opacity-10 rounded-full"></div>
+
+        <div className="relative z-10 flex items-center gap-5">
+          <div className="w-16 h-16 rounded-3xl flex items-center justify-center shadow-inner bg-slate-800 text-indigo-400">
+            <DoorOpen className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-black text-white tracking-tight">Checkout Hub</h1>
+            <p className="mt-1 text-slate-400 font-medium flex items-center gap-2 text-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Room Vacate & No-Dues Clearance Pipeline
             </p>
           </div>
+        </div>
 
-          <button
-            onClick={fetchRequests}
-            className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition flex items-center gap-2 self-start md:self-auto backdrop-blur"
-          >
-            <RefreshCw className="w-4 h-4 text-indigo-300" /> Refresh Requests
-          </button>
+        <div className="relative z-10 flex gap-4 overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+          <MetricBadge label="Pending" value={pendingCount} color="amber" />
+          <MetricBadge label="Defaulters" value={defaulterCount} color="rose" alert />
+          <MetricBadge label="Cleared" value={approvedCount} color="emerald" />
         </div>
       </div>
 
       {msg && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-3 shadow-xs"
-        >
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span>{msg}</span>
-        </motion.div>
+        <div className={`p-4 rounded-2xl flex items-center gap-3 font-bold text-sm ${
+          msg.type === 'error' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+        }`}>
+          {msg.type === 'error' ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+          {msg.text}
+        </div>
       )}
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Pending Inspection</span>
-            <h3 className="text-2xl font-black text-amber-600 mt-1">{pendingCount}</h3>
-            <p className="text-[11px] text-slate-500 font-medium mt-0.5">Awaiting Warden Review</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-            <Clock className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Blocked (Pending Dues)</span>
-            <h3 className="text-2xl font-black text-rose-600 mt-1">{defaulterCount}</h3>
-            <p className="text-[11px] text-slate-500 font-medium mt-0.5">Financial Clearance Needed</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-            <AlertTriangle className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Approved & Vacated</span>
-            <h3 className="text-2xl font-black text-emerald-600 mt-1">{approvedCount}</h3>
-            <p className="text-[11px] text-slate-500 font-medium mt-0.5">Official Exit Completed</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Flagged / Rejected</span>
-            <h3 className="text-2xl font-black text-slate-700 mt-1">{rejectedCount}</h3>
-            <p className="text-[11px] text-slate-500 font-medium mt-0.5">Issues Citation Flagged</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold">
-            <X className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Tabs & Search Bar */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        
+      {/* Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto p-1 bg-slate-100/80 rounded-2xl">
-          {['Pending', 'Approved', 'Rejected', 'All'].map((tab) => (
+        <div className="flex items-center p-1 bg-slate-200/50 backdrop-blur rounded-[1.2rem] border border-slate-300/50 w-full md:w-auto">
+          {['Pending', 'Approved', 'Rejected', 'All'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+              className={`flex-1 md:px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
                 activeTab === tab 
-                  ? 'bg-white text-indigo-900 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-indigo-600 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
               }`}
             >
-              {tab === 'Pending' ? `⏳ Pending (${pendingCount})` :
-               tab === 'Approved' ? `✅ Approved (${approvedCount})` :
-               tab === 'Rejected' ? `🛑 Flagged (${rejectedCount})` : `All (${requests.length})`}
+              {tab}
             </button>
           ))}
         </div>
 
         {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search student, roll, room..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-2xl border border-slate-200 text-xs font-medium focus:border-indigo-600 focus:outline-none bg-slate-50/50"
-          />
+        <div className="relative w-full md:w-80 group">
+          <div className="absolute inset-0 bg-indigo-500/10 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="relative flex items-center">
+            <Search className="absolute left-4 w-5 h-5 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search student, roll no, room..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white text-slate-800 placeholder-slate-400 border border-slate-200 rounded-[1.2rem] pl-11 pr-4 py-3 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm transition-all"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Requests List */}
+      {/* Requests Grid */}
       {filteredRequests.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 border border-slate-200/90 text-center space-y-3">
-          <DoorOpen className="w-12 h-12 text-slate-300 mx-auto" />
-          <h3 className="text-base font-black text-slate-900">No Checkout Requests Found</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            {search ? 'No requests match your current search query.' : `There are currently no hostel checkout requests under tab "${activeTab}".`}
+        <div className="flex flex-col items-center justify-center p-12 bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-300 text-center">
+          <BadgeCheck className="w-16 h-16 text-slate-300 mb-4" />
+          <h3 className="text-xl font-black text-slate-700">No Checkouts Found</h3>
+          <p className="text-slate-500 font-medium mt-1">
+            {search ? 'Try adjusting your search filters.' : `Queue is empty for ${activeTab} status.`}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {filteredRequests.map((req) => {
-            const isBlocked = req.totalDues > 0;
-            const isPending = req.status === 'Pending';
-            const isApproved = req.status === 'Approved';
-            const isRejected = req.status === 'Rejected';
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                      {filteredRequests.map((req) => {
+              const isPending = req.status === 'Pending';
+              const isBlocked = req.totalDues > 0;
 
-            return (
-              <motion.div
-                key={req.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`bg-white rounded-3xl border-2 p-6 shadow-sm space-y-5 transition-all ${
-                  isPending ? (isBlocked ? 'border-rose-200 bg-gradient-to-r from-white via-rose-50/20 to-white' : 'border-amber-200 bg-gradient-to-r from-white via-amber-50/20 to-white') :
-                  isApproved ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 bg-slate-50/40'
-                }`}
-              >
-                {/* Header Row */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-700 to-blue-600 text-white font-black text-lg flex items-center justify-center shadow-md shrink-0">
-                      {req.student_name?.[0] || 'S'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-black text-slate-900">{req.student_name}</h3>
-                        <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-md">
-                          {req.roll_number}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        {req.branch} • Year {req.year} • Phone: <strong className="text-slate-800">{req.phone || 'N/A'}</strong>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
-                      <Bed className="w-3.5 h-3.5 text-indigo-600" />
-                      {req.room_number ? `${req.block_name || 'Block A'} • Room ${req.room_number} (${req.bed_number || 'Bed'})` : 'Unassigned Bed'}
-                    </span>
-
-                    <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
-                      isApproved ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                      isRejected ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
-                    }`}>
-                      {req.status === 'Pending' ? '⏳ Pending Review' : req.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Request Details & Financial Status Split */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  
-                  {/* Left: Request Info */}
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Target Checkout Date</span>
-                      <span className="font-bold font-mono text-slate-900 bg-white px-2.5 py-0.5 rounded border border-slate-200">
-                        📅 {req.expected_checkout_date}
-                      </span>
-                    </div>
-
-                    <div className="pt-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Reason for Leaving</span>
-                      <p className="font-bold text-slate-800 mt-0.5 bg-white p-2.5 rounded-xl border border-slate-200 leading-relaxed">
-                        "{req.reason}"
-                      </p>
-                    </div>
-
-                    <div className="text-[11px] text-slate-400 font-semibold pt-1">
-                      Application Submitted: {new Date(req.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-
-                  {/* Right: Dues Status Box */}
-                  <div className={`p-4 rounded-2xl border space-y-2.5 text-xs ${
-                    isBlocked 
-                      ? 'bg-rose-50/80 border-rose-300 text-rose-950' 
-                      : 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
+              return (
+                <div 
+                  key={req.id}
+                  className="bg-white rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all overflow-hidden flex flex-col"
+                >
+                  {/* Card Header */}
+                  <div className={`p-6 border-b flex justify-between items-start ${
+                    req.status === 'Approved' ? 'bg-emerald-50/50 border-emerald-100' :
+                    req.status === 'Rejected' ? 'bg-rose-50/50 border-rose-100' :
+                    'bg-slate-50/50 border-slate-100'
                   }`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider block">Financial Ledger Status</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        isBlocked ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
-                      }`}>
-                        {isBlocked ? '🛑 Dues Pending' : '✅ 0 Dues Cleared'}
-                      </span>
-                    </div>
-
-                    {isBlocked ? (
-                      <div className="space-y-2">
-                        <div className="p-3 bg-white/90 rounded-xl border border-rose-200 grid grid-cols-2 gap-2 text-[11px]">
-                          <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Pending Fees</span>
-                            <span className="font-mono font-black text-rose-700">₹{Number(req.pendingFee).toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Unpaid Fines</span>
-                            <span className="font-mono font-black text-rose-700">₹{Number(req.pendingFines).toLocaleString()}</span>
-                          </div>
-                        </div>
-
-                        <div className="text-xs font-bold text-rose-900 bg-rose-100/80 p-2.5 rounded-xl border border-rose-300 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                          <span>Total Dues: <strong>₹{Number(req.totalDues).toLocaleString()}</strong>. Checkout approval is blocked until settled.</span>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-[1.2rem] bg-indigo-100 flex items-center justify-center shadow-sm">
+                        <span className="text-lg font-black text-indigo-700 uppercase">{req.student_name.charAt(0)}</span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-800">{req.student_name}</h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider">{req.roll_number}</span>
+                          <span className="flex items-center gap-1 text-[11px] font-bold text-slate-500"><Building className="w-3 h-3"/> {req.block_name}</span>
+                          <span className="flex items-center gap-1 text-[11px] font-bold text-slate-500"><Bed className="w-3 h-3"/> Room {req.room_number}</span>
                         </div>
                       </div>
-                    ) : (
-                      <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 space-y-1">
-                        <div className="flex items-center gap-2 text-emerald-800 font-black text-xs">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" /> All Dues Cleared (₹0 Outstanding Balance)
-                        </div>
-                        <p className="text-[11px] text-slate-600">
-                          Student has settled all semester fees and fines. Eligible for room inspection clearance.
+                    </div>
+                    
+                    {/* Status Badge */}
+                    <div className={`px-4 py-1.5 rounded-full border text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 ${
+                      req.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                      req.status === 'Rejected' ? 'bg-rose-100 text-rose-700 border-rose-200' :
+                      'bg-amber-100 text-amber-700 border-amber-200'
+                    }`}>
+                      {req.status === 'Approved' ? <CheckCircle2 className="w-3.5 h-3.5" /> : 
+                       req.status === 'Rejected' ? <X className="w-3.5 h-3.5" /> : 
+                       <Clock className="w-3.5 h-3.5" />}
+                      {req.status}
+                    </div>
+                  </div>
+
+                  {/* Content Split */}
+                  <div className="p-6 flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white">
+                    
+                    {/* Left: Info */}
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Expected Checkout</p>
+                        <p className="text-sm font-black text-slate-800 flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-indigo-500" />
+                          {req.expected_checkout_date}
                         </p>
                       </div>
-                    )}
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Reason for Leaving</p>
+                        <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm font-semibold text-slate-700">
+                          "{req.reason}"
+                        </div>
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-400 mt-2">
+                        Applied: {new Date(req.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    {/* Right: Dues */}
+                    <div className="flex flex-col h-full">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Financial Clearance</p>
+                      
+                      {isBlocked ? (
+                        <div className="flex-1 bg-rose-50 border border-rose-200 rounded-[1.5rem] p-4 flex flex-col justify-center">
+                          <div className="flex items-center gap-2 mb-3">
+                            <ShieldAlert className="w-5 h-5 text-rose-600" />
+                            <span className="text-sm font-black text-rose-900">Clearance Blocked</span>
+                          </div>
+                          
+                          <div className="bg-white/80 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs font-bold mb-3 border border-rose-100 shadow-sm">
+                            <div>
+                              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Fees</span>
+                              <span className="text-rose-700 text-sm">₹{Number(req.pendingFee).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Fines</span>
+                              <span className="text-rose-700 text-sm">₹{Number(req.pendingFines).toLocaleString()}</span>
+                            </div>
+                          </div>
+                          <p className="text-[10px] font-bold text-rose-600 text-center uppercase tracking-wider">
+                            Total Dues: ₹{Number(req.totalDues).toLocaleString()}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-[1.5rem] p-4 flex flex-col items-center justify-center text-center">
+                          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mb-2 shadow-sm border border-emerald-200">
+                            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                          </div>
+                          <p className="text-sm font-black text-emerald-900">All Dues Cleared</p>
+                          <p className="text-[11px] font-bold text-emerald-700 mt-1">₹0 Outstanding Balance</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                </div>
-
-                {/* Remarks & Warden Action Footer */}
-                {isPending && (
-                  <div className="pt-4 border-t border-slate-100 space-y-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Warden Room Inspection Remarks / Notes
-                      </label>
+                  {/* Action Footer */}
+                  {isPending && (
+                    <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
                       <input
                         type="text"
-                        placeholder="e.g. Room key returned, electricity meter cleared, furniture intact..."
+                        placeholder="Warden Remarks (e.g. Room key returned)..."
                         value={remarksMap[req.id] || ''}
                         onChange={(e) => handleRemarkChange(req.id, e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:border-indigo-600 focus:outline-none bg-white"
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
+                      <div className="flex gap-2">
+                        <button
+                          disabled={processingId === req.id}
+                          onClick={() => handleProcess(req.id, 'Reject', req.student_name)}
+                          className="px-4 py-2.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-black transition-colors flex items-center justify-center"
+                          title="Reject Application"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <button
+                          disabled={processingId === req.id || isBlocked}
+                          onClick={() => handleProcess(req.id, 'Approve', req.student_name)}
+                          className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                            isBlocked 
+                              ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20'
+                          }`}
+                        >
+                          {processingId === req.id ? (
+                            <span className="flex items-center gap-2"><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> Processing...</span>
+                          ) : (
+                            <span className="flex items-center gap-2"><Check className="w-4 h-4" /> Finalize Checkout</span>
+                          )}
+                        </button>
+                      </div>
                     </div>
+                  )}
 
-                    <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5">
-                      <button
-                        type="button"
-                        disabled={processingId === req.id}
-                        onClick={() => handleProcess(req.id, 'Reject', req.student_name)}
-                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-300 text-xs font-bold transition flex items-center justify-center gap-1.5"
-                      >
-                        <X className="w-4 h-4 text-rose-600" /> Flag / Reject Application
-                      </button>
-
-                      <motion.button
-                        whileHover={{ scale: isBlocked ? 1 : 1.02 }}
-                        whileTap={{ scale: isBlocked ? 1 : 0.98 }}
-                        disabled={processingId === req.id || isBlocked}
-                        onClick={() => handleProcess(req.id, 'Approve', req.student_name)}
-                        className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-black shadow-md transition flex items-center justify-center gap-2 cursor-pointer ${
-                          isBlocked 
-                            ? 'bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed' 
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
-                        }`}
-                      >
-                        {processingId === req.id ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            <span>Processing Approval...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-4 h-4" /> Approve & Finalize Checkout
-                          </>
-                        )}
-                      </motion.button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Completed Remarks Footer (If Approved or Rejected) */}
-                {!isPending && req.remarks && (
-                  <div className="pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl">
-                    <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>Warden Remarks: <strong>"{req.remarks}"</strong></span>
-                  </div>
-                )}
-
-              </motion.div>
-            );
-          })}
+                  {!isPending && req.remarks && (
+                     <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+                       <p className="text-[11px] font-bold text-slate-500 flex items-center gap-2">
+                         <FileText className="w-4 h-4 text-slate-400" />
+                         Warden Remarks: <span className="text-slate-800">"{req.remarks}"</span>
+                       </p>
+                     </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       )}
+    </div>
+  );
+}
 
+function MetricBadge({ label, value, color, alert }) {
+  const styles = {
+    amber: 'bg-amber-900/40 text-amber-400 border-amber-700/50',
+    rose: 'bg-rose-900/40 text-rose-400 border-rose-700/50',
+    emerald: 'bg-emerald-900/40 text-emerald-400 border-emerald-700/50',
+  };
+  return (
+    <div className={`px-4 py-2 rounded-2xl border backdrop-blur-md flex items-center gap-3 ${styles[color]}`}>
+      <div>
+        <p className="text-[9px] font-black uppercase tracking-widest opacity-80">{label}</p>
+        <p className={`text-xl font-black leading-none mt-0.5 ${alert && value > 0 ? 'animate-pulse' : ''}`}>{value}</p>
+      </div>
     </div>
   );
 }

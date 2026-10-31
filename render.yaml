@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: smart-hostel-system
+    env: node
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build && cp -r dist/* ../backend/dist/ && cd ../backend && npm install
+    startCommand: cd backend && node src/server.js
+    envVars:
+      - key: DB_TYPE
+        value: sqlite
+      - key: JWT_SECRET
+        value: apex-hostel-jwt-secret-key-2026-btech-cse
+      - key: ADMIN_WELLNESS_EMAIL
+        value: nikhilsheoran093@gmail.com
+      - key: GMAIL_USER
+        value: nikhilsheoran093@gmail.com
+      - key: GMAIL_APP_PASSWORD
+        value: txyjkcpbehztnmbi

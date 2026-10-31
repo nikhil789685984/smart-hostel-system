@@ -8,6 +8,7 @@ export async function classifyComplaint(title = '', description = '') {
   const combinedText = `${title} ${description}`.trim();
 
   // 1. If Gemini API Key is provided, call Gemini API
+  console.log('API Key present?', !!config.gemini.apiKey, 'Model:', config.gemini.model, 'Message:', message);
   if (config.gemini.apiKey) {
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${config.gemini.model}:generateContent?key=${config.gemini.apiKey}`, {
@@ -39,7 +40,18 @@ Respond ONLY with valid JSON in this exact structure:
       });
 
       if (response.ok) {
+      } else {
+        console.error('Gemini NOT OK:', await response.text());
+      }
+      if (response.ok) {
+      } else {
+        const errData = await response.text();
+        console.error('Gemini API Error:', errData);
+      }
+      if (response.ok) {
         const data = await response.json();
+        console.log('Gemini full JSON:', JSON.stringify(data));
+        console.log('Gemini Response:', JSON.stringify(data));
         const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (rawContent) {
           const parsed = JSON.parse(rawContent);
@@ -197,7 +209,7 @@ User Question: "${message}"`
           }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 500
+            maxOutputTokens: 2000
           }
         })
       });
@@ -205,6 +217,7 @@ User Question: "${message}"`
       if (response.ok) {
         const data = await response.json();
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        console.log('Gemini raw text:', reply);
         if (reply) {
           return {
             reply,
@@ -213,7 +226,7 @@ User Question: "${message}"`
         }
       }
     } catch (err) {
-      console.warn('Gemini chat failed, falling back to local grounded assistant:', err.message);
+      console.warn('Gemini chat failed, falling back to local grounded assistant:', err.stack);
     }
   }
 

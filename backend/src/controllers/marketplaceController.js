@@ -1,4 +1,5 @@
 import { get, all, run } from '../database/db.js';
+import { createBroadcastNotification } from './notificationController.js';
 
 export async function getMarketplaceItems(req, res) {
   try {
@@ -93,11 +94,23 @@ export async function createMarketplaceItem(req, res) {
       finalImg
     ]);
 
+    
+    try {
+      await createBroadcastNotification(
+        ['all'],
+        '🛒 New Marketplace Item',
+        `${req.user.name} just listed a ${title} for ₹${price}. Check it out!`,
+        'success',
+        '/student/marketplace',
+        req.user.id
+      );
+    } catch(e) {}
     res.status(201).json({
       success: true,
       message: 'Item listed successfully on Hostel Mini Marketplace!',
       itemId: result.insertId
     });
+  
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

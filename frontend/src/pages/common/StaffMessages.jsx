@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
+import { FileVideo, FileCode, Play, Download, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send, Search, RefreshCw, MessageSquare, Sparkles,
   CheckCircle2, CheckCheck, Info, Bell, ShieldAlert,
   Zap, ArrowRight, UserCheck, Check, MoreVertical
+, FolderSync, Video, PhoneCall, Maximize2, Music
 } from 'lucide-react';
 
 const PRIORITY_BADGES = {
@@ -25,7 +27,149 @@ const CATEGORY_COLORS = {
   Disciplinary: 'bg-purple-100 text-purple-700 border-purple-200'
 };
 
+
+
+
+const forceDownload = async (e, url, filename) => {
+  e.stopPropagation();
+  e.preventDefault();
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download failed', error);
+    window.open(url, '_blank');
+  }
+};
+
+const formatBytes = (bytes, decimals = 2) => {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
+
+const renderMessageWithMedia = (text, onImageClick) => {
+  if (!text) return null;
+
+  const renderText = (rawText) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = rawText.split(urlRegex);
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        return <a key={i} href={part} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors break-all">{part}</a>;
+      }
+      return part;
+    });
+  };
+
+  
+  // Format markdown bold
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let formattedText = text;
+  // Actually, mixing react elements and string replace for markdown is complex if done manually.
+  // We'll stick to our file regex for now, just making media blocks look insane.
+
+  const fileRegex = /\[(.*?)\]\((.*?)\)/g;
+  let elements = [];
+  let lastIndex = 0;
+  let match;
+  
+  const baseHost = API_BASE.replace('/api', '');
+
+  while ((match = fileRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const textPart = text.substring(lastIndex, match.index).trim();
+      if (textPart) elements.push(<span key={`text-${lastIndex}`} className="whitespace-pre-wrap">{renderText(textPart)}</span>);
+    }
+    
+    let filename = match[1];
+    let rawUrl = match[2];
+    const finalUrl = rawUrl.startsWith('/uploads') ? `${baseHost}${rawUrl}` : rawUrl;
+    const ext = finalUrl.split('.').pop().toLowerCase();
+    
+    if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+      elements.push(
+        <div key={`media-${match.index}`} className="mt-3 relative group rounded-2xl overflow-hidden border border-white/10 bg-slate-900 shadow-2xl max-w-md transition-all duration-300 hover:shadow-indigo-500/20">
+          <video controls preload="metadata" className="w-full max-h-[350px] object-contain bg-black/40 rounded-2xl">
+            <source src={finalUrl} />
+          </video>
+          <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+             <button onClick={(e) => forceDownload(e, finalUrl, filename)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-indigo-500 hover:scale-110 transition-all shadow-xl">
+                <Download className="w-5 h-5" />
+             </button>
+          </div>
+        </div>
+      );
+    } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+      elements.push(
+        <div key={`media-${match.index}`} className="mt-3 relative group rounded-2xl overflow-hidden border border-white/10 shadow-2xl max-w-sm cursor-zoom-in" onClick={() => onImageClick && onImageClick(finalUrl)}>
+          <img src={finalUrl} alt={filename} className="w-full max-h-[300px] object-cover group-hover:scale-110 transition-transform duration-700" />
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+             <button onClick={(e) => forceDownload(e, finalUrl, filename)} className="w-8 h-8 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-indigo-500 transition shadow-lg">
+                <Download className="w-4 h-4" />
+             </button>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+             <div className="flex justify-between items-end">
+                <span className="text-white font-bold text-sm truncate pr-4">{filename}</span>
+                <Maximize2 className="w-5 h-5 text-white/80" />
+             </div>
+          </div>
+        </div>
+      );
+    } else if (['mp3', 'wav', 'm4a'].includes(ext)) {
+      elements.push(
+        <div key={`media-${match.index}`} className="mt-3 relative flex items-center gap-4 bg-slate-900 rounded-full p-2 pr-6 max-w-sm border border-slate-700 shadow-xl">
+           <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center text-white shrink-0 shadow-[0_0_15px_rgba(99,102,241,0.5)]">
+             <Music className="w-5 h-5" />
+           </div>
+           <audio controls className="h-8 max-w-[200px] sepia hue-rotate-180 invert brightness-150 contrast-125" src={finalUrl}></audio>
+        </div>
+      );
+    } else {
+      elements.push(
+        <a key={`media-${match.index}`} href={finalUrl} onClick={(e) => forceDownload(e, finalUrl, filename)} className="mt-3 flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-500/10 transition-all cursor-pointer no-underline group block w-full max-w-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-100 transition-colors"></div>
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-inner relative z-10">
+             {['pdf'].includes(ext) ? <FileCode className="w-7 h-7" /> : <FileVideo className="w-7 h-7" />}
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col justify-center relative z-10">
+            <p className="font-bold text-slate-800 truncate w-full m-0 text-base">{filename}</p>
+            <p className="text-[11px] text-slate-400 font-bold m-0 mt-1 uppercase tracking-widest flex items-center gap-1">
+               <span className="w-2 h-2 rounded-full bg-emerald-400"></span> {ext.toUpperCase()} DOCUMENT
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all relative z-10 shadow-sm">
+            <Download className="w-4 h-4" />
+          </div>
+        </a>
+      );
+    }
+    
+    lastIndex = fileRegex.lastIndex;
+  }
+  
+  if (lastIndex < text.length) {
+    const textPart = text.substring(lastIndex).trim();
+    if (textPart) elements.push(<span key={`text-${lastIndex}`} className="whitespace-pre-wrap">{renderText(textPart)}</span>);
+  }
+  
+  return elements.length > 0 ? <div className="flex flex-col gap-1.5">{elements}</div> : <span className="whitespace-pre-wrap">{renderText(text)}</span>;
+};
+
 export default function StaffMessages() {
+  const [lightboxImage, setLightboxImage] = useState(null);
+
   const { user } = useAuth();
   const [contacts, setContacts] = useState([]);
   const [activeContact, setActiveContact] = useState(null);
@@ -34,6 +178,50 @@ export default function StaffMessages() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState('');
+  const fileInputRef = useRef(null);
+  
+  
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setIsUploading(true);
+      setUploadProgress(10);
+      setFeedbackMsg(`Uploading ${file.name}...`);
+      
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress(p => p < 90 ? p + 15 : 90);
+      }, 300);
+
+      const res = await api.uploadFile(file);
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      if (res.fileUrl) {
+        setText(prev => (prev ? prev + '\n\n' : '') + `[${file.name}](${res.fileUrl})`);
+        setFeedbackMsg('Media attached successfully! ✅');
+      } else {
+        setFeedbackMsg('Upload failed: No URL returned');
+      }
+      setTimeout(() => {
+        setFeedbackMsg('');
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 2000);
+    } catch (err) {
+      setFeedbackMsg('Upload failed');
+      setIsUploading(false);
+      setUploadProgress(0);
+      setTimeout(() => setFeedbackMsg(''), 2000);
+    }
+  };
+
+    const [showVCModal, setShowVCModal] = useState(false);
+  const [showFileModal, setShowFileModal] = useState(false);
   
   const [text, setText] = useState('');
   const [subject, setSubject] = useState('');
@@ -43,6 +231,7 @@ export default function StaffMessages() {
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
   const messagesEndRef = useRef(null);
+  const prevMessagesLength = useRef(0);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -84,10 +273,20 @@ export default function StaffMessages() {
   useEffect(() => { loadContacts(); }, []);
 
   useEffect(() => {
-    if (activeContact) loadConversation(activeContact.id);
+    if (activeContact) {
+      prevMessagesLength.current = 0; // Reset so new contact scrolls to bottom
+      loadConversation(activeContact.id);
+    }
   }, [activeContact?.id]);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  
+
+    useEffect(() => {
+    if (messages.length > prevMessagesLength.current) {
+      scrollToBottom();
+    }
+    prevMessagesLength.current = messages.length;
+  }, [messages]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -194,9 +393,9 @@ export default function StaffMessages() {
                 const isSelected = activeContact?.id === contact.id;
                 const isBroad = contact.id === 'broadcast';
                 return (
-                  <motion.button
-                    whileHover={{ scale: 0.98 }}
-                    whileTap={{ scale: 0.95 }}
+                  <button
+                    
+                    
                     key={contact.id}
                     onClick={() => setActiveContact(contact)}
                     className={`w-full group relative flex items-center p-2 sm:p-3 rounded-2xl transition-all ${
@@ -205,7 +404,7 @@ export default function StaffMessages() {
                   >
                     {/* Active Line Indicator */}
                     {isSelected && (
-                      <motion.div layoutId="activeContactIndicator" className="absolute left-0 w-1 h-8 bg-white rounded-r-full" />
+                      <div className="absolute left-0 w-1 h-8 bg-white rounded-r-full" />
                     )}
                     
                     <div className="relative flex-shrink-0 mx-auto sm:mx-0">
@@ -245,7 +444,7 @@ export default function StaffMessages() {
                         {contact.latest_message?.message || (isBroad ? 'Campus-wide alerts' : 'Tap to chat')}
                       </p>
                     </div>
-                  </motion.button>
+                  </button>
                 );
               })
             )}
@@ -319,9 +518,9 @@ export default function StaffMessages() {
                     const cBadg = CATEGORY_COLORS[msg.category] || CATEGORY_COLORS.General;
 
                     return (
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
+                      <div 
+                        
+                        
                         key={msg.id} 
                         className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[90%] sm:max-w-[75%] ${isMe ? 'ml-auto' : 'mr-auto'}`}
                       >
@@ -365,7 +564,7 @@ export default function StaffMessages() {
 
                           {/* Message Body */}
                           <p className={`text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap ${isMe ? 'text-white' : 'text-slate-700'}`}>
-                            {msg.message}
+                            {renderMessageWithMedia(msg.message, setLightboxImage)}
                           </p>
 
                           {/* Footer / Time */}
@@ -376,7 +575,7 @@ export default function StaffMessages() {
                             )}
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })
                 )}
@@ -386,11 +585,11 @@ export default function StaffMessages() {
               {/* Chat Input Area */}
               <div className="bg-white/80 backdrop-blur-xl border-t border-slate-200/50 p-3 sm:p-4 z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.02)]">
                 {feedbackMsg && (
-                  <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="mb-2 flex items-center justify-center">
+                  <div   className="mb-2 flex items-center justify-center">
                     <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full flex items-center gap-1 shadow-sm">
                       <CheckCircle2 className="w-3 h-3" /> {feedbackMsg}
                     </span>
-                  </motion.div>
+                  </div>
                 )}
                 
                 <form onSubmit={handleSend} className="bg-slate-100/70 border border-slate-200 rounded-[24px] p-2 sm:p-3 focus-within:ring-2 focus-within:ring-indigo-500/50 focus-within:bg-white transition-all shadow-sm">
@@ -424,20 +623,43 @@ export default function StaffMessages() {
                     />
 
                     <div className="flex flex-col justify-end gap-1">
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
+                      <button
                         disabled={!text.trim() || sending}
                         type="submit"
                         className="w-10 h-10 sm:w-12 sm:h-12 rounded-[18px] bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white flex items-center justify-center shadow-md disabled:shadow-none transition-all cursor-pointer"
                       >
                         {sending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-1" />}
-                      </motion.button>
+                      </button>
                     </div>
                   </div>
                   
                   {/* Quick Controls Bottom Row */}
-                  <div className="flex items-center justify-between px-2 pt-2 mt-2 border-t border-slate-200/50">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-2 pt-2 mt-2 border-t border-slate-200/50 gap-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      
+                      <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="*/*" className="hidden" />
+                      
+                      <button 
+                        type="button" 
+                        disabled={isUploading}
+                        onClick={() => fileInputRef.current?.click()} 
+                        className={`p-1.5 sm:p-2 ${isUploading ? 'bg-indigo-100 text-indigo-400' : 'bg-slate-200 hover:bg-slate-300 text-slate-700'} rounded-lg flex items-center gap-1 text-[10px] sm:text-xs font-bold transition-all relative overflow-hidden`}
+                      >
+                        {isUploading ? (
+                          <>
+                            <div className="absolute inset-0 bg-indigo-200/50 transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 animate-spin relative z-10"/> 
+                            <span className="relative z-10">Uploading...</span>
+                          </>
+                        ) : (
+                          <><FolderSync className="w-3 h-3 sm:w-4 sm:h-4"/> Attach File</>
+                        )}
+                      </button>
+
+                      
+                      
+
+                      <div className="w-px h-4 bg-slate-300 mx-1 hidden sm:block"></div>
                       <select value={priority} onChange={e=>setPriority(e.target.value)} className="bg-white border border-slate-200 text-[10px] font-bold text-slate-600 py-1 px-2 rounded-lg cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500">
                         <option value="Normal">🟢 Normal</option>
                         <option value="High">🟠 High</option>
@@ -467,7 +689,41 @@ export default function StaffMessages() {
             </div>
           )}
         </div>
+      
+
+
+
       </div>
+      
+      {/* Lightbox Modal */}
+      
+        {lightboxImage && (
+          <div 
+             
+             
+             
+            onClick={() => setLightboxImage(null)} 
+            className="fixed inset-0 z-[999] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 cursor-zoom-out"
+          >
+            <div className="absolute top-6 right-6 flex items-center gap-3 z-50">
+              <button onClick={(e) => forceDownload(e, lightboxImage, lightboxImage.split("/").pop())} className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full backdrop-blur-md transition-all">
+                <Download className="w-6 h-6" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }} className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full backdrop-blur-md transition-all">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <img 
+              
+              
+              
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              src={lightboxImage} 
+              className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-white/10" 
+            />
+          </div>
+        )}
+      
     </div>
   );
 }

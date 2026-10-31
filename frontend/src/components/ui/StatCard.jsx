@@ -43,19 +43,19 @@ export default function StatCard({ title, value, subtitle, icon: Icon, color = '
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className={`glass-card rounded-3xl p-6 border border-slate-200/90 shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden group ${c.border}`}
+      className={`glass-card rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/90 shadow-sm hover:shadow-xl transition-all duration-300 relative overflow-hidden group ${c.border}`}
     >
       {/* Subtle top color glow line */}
       <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${c.accent} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{title}</p>
-          <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1 tracking-tight">{value}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 truncate">{title}</p>
+          <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 mt-0.5 sm:mt-1 tracking-tight truncate">{value}</h3>
         </div>
         {Icon && (
-          <div className={`w-13 h-13 rounded-2xl ${c.bg} flex items-center justify-center p-3 group-hover:scale-110 transition-transform duration-300 shadow-sm`}>
-            <Icon className="w-6 h-6" />
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${c.bg} flex items-center justify-center p-2 sm:p-2.5 group-hover:scale-105 transition-transform duration-300 shadow-sm shrink-0`}>
+            <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         )}
       </div>

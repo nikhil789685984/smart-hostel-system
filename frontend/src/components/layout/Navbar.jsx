@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { 
+import {
+
   Building2, 
   Bell, 
   LogOut, 
@@ -11,7 +12,7 @@ import {
   Sparkles,
   ShieldCheck,
   ChevronDown
-} from 'lucide-react';
+, Map} from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
 
 import DigitalIDCard from '../ui/DigitalIDCard';
@@ -163,10 +164,15 @@ export default function Navbar({ onToggleSidebar, isSidebarOpen }) {
 
                   {/* Profile Dropdown */}
                   {profileMenuOpen && (
-                    <div 
-                      className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2"
-                      onMouseLeave={() => setProfileMenuOpen(false)}
-                    >
+                    <>
+                      <div
+                        className="fixed inset-0 z-40 bg-transparent"
+                        onClick={() => setProfileMenuOpen(false)}
+                      />
+                      <div 
+                        className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2"
+                        onMouseLeave={() => setProfileMenuOpen(false)}
+                      >
                       <div className="px-4 py-3 border-b border-slate-100">
                         <p className="text-sm font-bold text-slate-900">{user.name}</p>
                         <p className="text-xs text-slate-500 truncate">{user.email}</p>
@@ -219,6 +225,7 @@ export default function Navbar({ onToggleSidebar, isSidebarOpen }) {
                         </button>
                       </div>
                     </div>
+                    </>
                   )}
                 </div>
               </>

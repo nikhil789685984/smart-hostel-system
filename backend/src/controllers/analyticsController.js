@@ -54,18 +54,28 @@ export async function getHostelAnalytics(req, res) {
       FROM mess_feedback
     `);
 
-    // 5. Total counts & Real-Time Gross Revenue (Base Fees + All Collected Fines)
+    // 5. Total counts & Real-Time Gross Revenue (Base Fees + All Fines Levied)
     const totalStudents = (await get("SELECT COUNT(*) as count FROM users WHERE role = 'student'"))?.count || 0;
     const totalWardens = (await get("SELECT COUNT(*) as count FROM users WHERE role = 'warden'"))?.count || 0;
 
-    // Real-Time Gross Revenue Calculation: includes every rupee/paisa from fees + fines
-    const feeRevenue = Number(((await get('SELECT COALESCE(SUM(paid_amount), 0) as sum FROM fees'))?.sum || 0).toFixed(2));
-    const finesRevenue = Number(((await get("SELECT COALESCE(SUM(amount), 0) as sum FROM fines WHERE status = 'Paid'"))?.sum || 0).toFixed(2));
-    const totalRevenue = Number((feeRevenue + finesRevenue).toFixed(2));
+    // Base Fee Demand & Paid
+    const totalBaseFeeDemand = Number(((await get('SELECT COALESCE(SUM(total_amount), 0) as sum FROM fees'))?.sum || 0).toFixed(2));
+    const feePaidAmountSum = Number(((await get('SELECT COALESCE(SUM(paid_amount), 0) as sum FROM fees'))?.sum || 0).toFixed(2));
+    const feeTransactionsSum = Number(((await get('SELECT COALESCE(SUM(amount), 0) as sum FROM fee_transactions'))?.sum || 0).toFixed(2));
 
-    const pendingFeeAmount = Number(((await get("SELECT COALESCE(SUM(pending_amount), 0) as sum FROM fees WHERE status != 'Paid'"))?.sum || 0).toFixed(2));
+    // Fines Paid, Pending, & Levied
+    const paidFinesSum = Number(((await get("SELECT COALESCE(SUM(amount), 0) as sum FROM fines WHERE status = 'Paid'"))?.sum || 0).toFixed(2));
     const pendingFines = Number(((await get("SELECT COALESCE(SUM(amount), 0) as sum FROM fines WHERE status != 'Paid'"))?.sum || 0).toFixed(2));
-    const totalPending = Number((pendingFeeAmount + pendingFines).toFixed(2));
+    const allFinesLevied = Number(((await get("SELECT COALESCE(SUM(amount), 0) as sum FROM fines"))?.sum || 0).toFixed(2));
+
+    // Precise Telemetry Breakdown:
+    const finesRevenue = paidFinesSum;
+    const totalRevenue = Number(Math.max(feeTransactionsSum, feePaidAmountSum + paidFinesSum).toFixed(2));
+    const feeRevenue = Number(Math.max(0, totalRevenue - finesRevenue).toFixed(2));
+
+    const pendingBaseFee = Number(Math.max(0, totalBaseFeeDemand - feePaidAmountSum).toFixed(2));
+    const totalPending = Number((pendingBaseFee + pendingFines).toFixed(2));
+    const totalBilledDemand = Number((totalBaseFeeDemand + allFinesLevied).toFixed(2));
 
     // Fine category distribution
     const finesBreakdown = await all(`
@@ -108,7 +118,7 @@ export async function getHostelAnalytics(req, res) {
 
     // 6. Automated Smart Insights (as requested in prompt)
     const insights = [
-      `Gross campus revenue stands at ₹${totalRevenue.toLocaleString()} (₹${feeRevenue.toLocaleString()} base fees + ₹${finesRevenue.toLocaleString()} collected fines).`,
+      `Gross campus revenue stands at ₹${totalRevenue.toLocaleString()} (₹${feeRevenue.toLocaleString()} base fees + ₹${finesRevenue.toLocaleString()} collected fines). Total billed demand across all students: ₹${totalBilledDemand.toLocaleString()}.`,
       `Overall hostel room occupancy currently stands at ${occupancyRate}%.`,
       pendingComplaints > 0 ? `${pendingComplaints} maintenance request(s) require warden attention.` : 'All complaints have been assigned or resolved.',
       `Mess satisfaction rating is currently ${messStats?.avg_rating || 4.2} out of 5.0 based on student reviews.`,
@@ -133,7 +143,9 @@ export async function getHostelAnalytics(req, res) {
         totalRevenue,
         feeRevenue,
         finesRevenue,
-        pendingFeeAmount,
+        allFinesLevied,
+        totalBilledDemand,
+        pendingFeeAmount: pendingBaseFee,
         pendingFines,
         totalPending,
         finesBreakdown: finesBreakdown || [],

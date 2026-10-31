@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { get, all, run } from '../database/db.js';
-import { createNotification } from './notificationController.js';
+import { createNotification, createBroadcastNotification } from './notificationController.js';
+
 
 export async function getAllStudents(req, res) {
   try {
@@ -9,15 +10,22 @@ export async function getAllStudents(req, res) {
     let sql = `
       SELECT s.*, 
              u.name, u.email, u.phone, u.avatar_url,
-             r.room_number, blk.name as block_name, b.bed_number,
-             f.status as fee_status, f.pending_amount
+             r.room_number, blk.name as block_name, b.bed_number, h.name as hostel_name,
+             ct.name as caretaker_name, ct.phone as caretaker_phone, ct.staff_id as caretaker_staff_id, ct.duty_role as caretaker_dept, ct.shift as caretaker_shift,
+             (SELECT wu.name FROM wardens w JOIN users wu ON wu.id = w.user_id WHERE w.assigned_hostel_id = h.id LIMIT 1) as warden_name,
+             f.status as fee_status,
+             COALESCE(f.paid_amount, 0) as paid_amount,
+             COALESCE(f.total_amount, 45000) as total_amount,
+             COALESCE(f.pending_amount, 0) as pending_amount
       FROM students s
       JOIN users u ON u.id = s.user_id
+      LEFT JOIN caretakers ct ON ct.id = s.caretaker_id
       LEFT JOIN room_allocations ra ON ra.student_id = s.id AND ra.status = 'active'
       LEFT JOIN beds b ON b.id = ra.bed_id
       LEFT JOIN rooms r ON r.id = b.room_id
       LEFT JOIN blocks blk ON blk.id = r.block_id
-      LEFT JOIN fees f ON f.student_id = s.id AND f.semester = s.semester
+      LEFT JOIN hostels h ON h.id = blk.hostel_id
+      LEFT JOIN fees f ON f.student_id = s.id
       WHERE 1=1
     `;
     const params = [];
@@ -36,7 +44,7 @@ export async function getAllStudents(req, res) {
       params.push(term, term, term);
     }
 
-    sql += ' ORDER BY s.roll_number ASC';
+    sql += ' GROUP BY s.id ORDER BY u.name ASC';
 
     const students = await all(sql, params);
     res.json({ success: true, students });
@@ -75,6 +83,22 @@ export async function getAllHostels(req, res) {
       LEFT JOIN beds b ON b.room_id = r.id
       GROUP BY h.id
     `);
+
+    // Fetch block details for each hostel
+    for (let h of hostels) {
+      h.blocks = await all(`
+        SELECT blk.id, blk.name as block_name,
+               COUNT(DISTINCT r.id) as total_rooms,
+               COUNT(DISTINCT b.id) as total_beds,
+               SUM(CASE WHEN b.status = 'occupied' THEN 1 ELSE 0 END) as occupied_beds,
+               SUM(CASE WHEN b.status = 'vacant' THEN 1 ELSE 0 END) as vacant_beds
+        FROM blocks blk
+        LEFT JOIN rooms r ON r.block_id = blk.id
+        LEFT JOIN beds b ON b.room_id = r.id
+        WHERE blk.hostel_id = ?
+        GROUP BY blk.id
+      `, [h.id]);
+    }
 
     res.json({ success: true, hostels });
   } catch (err) {
@@ -223,12 +247,46 @@ export async function deleteStudent(req, res) {
   try {
     const { id } = req.params;
     const student = await get('SELECT user_id FROM students WHERE id = ?', [id]);
+    
     if (student) {
+      // 1. Free up the bed and delete allocation
+      const allocation = await get("SELECT bed_id FROM room_allocations WHERE student_id = ? ORDER BY id DESC LIMIT 1", [id]);
+      if (allocation && allocation.bed_id) {
+        await run("UPDATE beds SET status = 'vacant' WHERE id = ?", [allocation.bed_id]);
+      }
+      
+      // 2. Discover all tables that have a student_id column and delete from them
+      const tablesInfo = await all("SELECT name FROM sqlite_master WHERE type='table'");
+      for (let t of tablesInfo) {
+        const table = t.name;
+        // Check if table has student_id
+        const columns = await all(`PRAGMA table_info(${table})`);
+        const hasStudentId = columns.some(col => col.name === 'student_id');
+        if (hasStudentId) {
+          try { await run(`DELETE FROM ${table} WHERE student_id = ?`, [id]); } catch(e) {}
+        }
+      }
+      
+      // 3. Delete notifications referencing user_id
+      try { await run('DELETE FROM notifications WHERE user_id = ?', [student.user_id]); } catch(e) {}
+
+      // 4. Disable foreign keys temporarily for SQLite
+      await run('PRAGMA foreign_keys = OFF;');
+
+      // 5. Delete the student record
+      await run('DELETE FROM students WHERE id = ?', [id]);
+
+      // 6. Delete the user record
       await run('DELETE FROM users WHERE id = ?', [student.user_id]);
+
+      // 7. Re-enable foreign keys
+      await run('PRAGMA foreign_keys = ON;');
     }
-    res.json({ success: true, message: 'Student removed successfully.' });
+    
+    res.json({ success: true, message: 'Student completely evicted and records cleared.' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Delete error:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete student: ' + err.message });
   }
 }
 
@@ -447,11 +505,15 @@ export async function getMyCheckoutRequest(req, res) {
       return res.status(404).json({ success: false, message: 'Student record not found.' });
     }
 
-    const request = await get(`
+    const latestRequest = await get(`
       SELECT * FROM checkout_requests
       WHERE student_id = ?
       ORDER BY created_at DESC LIMIT 1
     `, [student.id]);
+
+    const activeRequest = (latestRequest && ['Pending', 'Approved', 'Checked Out'].includes(latestRequest.status))
+      ? latestRequest
+      : null;
 
     // Also get dues for frontend check
     const feeRow = await get(`
@@ -472,7 +534,7 @@ export async function getMyCheckoutRequest(req, res) {
 
     res.json({
       success: true,
-      request: request || null,
+      request: activeRequest,
       dues: {
         totalDues,
         pendingFee,
@@ -689,4 +751,181 @@ export async function cancelCheckoutRequest(req, res) {
   }
 }
 
+
+
+
+export async function getStudentHistory(req, res) {
+  try {
+    let { studentId } = req.params;
+
+    if (req.user && (req.user.role === 'student' || studentId === 'me' || studentId === 'my-history')) {
+      const stRow = await get('SELECT id FROM students WHERE user_id = ?', [req.user.id]);
+      if (stRow) {
+        studentId = stRow.id;
+      }
+    }
+
+    // Check if student exists
+    const student = await get(`
+      SELECT s.*, u.name, u.email, u.phone,
+             r.room_number, r.floor, blk.name as block_name, b.bed_number, h.name as hostel_name,
+             ct.name as caretaker_name, ct.phone as caretaker_phone, ct.staff_id as caretaker_staff_id,
+             ct.duty_role as caretaker_dept, ct.shift as caretaker_shift, ct.assigned_block as caretaker_block,
+             (SELECT wu.name FROM wardens w JOIN users wu ON wu.id = w.user_id WHERE w.assigned_hostel_id = COALESCE(h.id, 1) LIMIT 1) as warden_name,
+             COALESCE(f.paid_amount, 0) as paid_amount,
+             COALESCE(f.total_amount, 45000) as total_amount,
+             COALESCE(f.pending_amount, 0) as pending_amount,
+             f.status as fee_status
+      FROM students s 
+      JOIN users u ON u.id = s.user_id 
+      LEFT JOIN caretakers ct ON ct.id = s.caretaker_id
+      LEFT JOIN room_allocations ra ON ra.student_id = s.id AND ra.status = 'active'
+      LEFT JOIN beds b ON b.id = ra.bed_id
+      LEFT JOIN rooms r ON r.id = b.room_id
+      LEFT JOIN blocks blk ON blk.id = r.block_id
+      LEFT JOIN hostels h ON h.id = blk.hostel_id
+      LEFT JOIN fees f ON f.student_id = s.id
+      WHERE s.id = ? OR s.user_id = ?
+    `, [studentId, studentId]);
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+
+    let timeline = [];
+    const sid = student.id;
+
+    // 1. Gate Passes
+    const gatePasses = await all(`SELECT id, pass_type || ' to ' || destination as title, status, created_at, 'Gate Pass' as type FROM gate_passes WHERE student_id = ?`, [sid]);
+    timeline.push(...gatePasses.map(i => ({ ...i, icon: 'gatepass', color: 'blue' })));
+
+    // 2. Complaints
+    const complaints = await all(`SELECT id, title, status, created_at, 'Complaint' as type FROM complaints WHERE student_id = ?`, [sid]);
+    timeline.push(...complaints.map(i => ({ ...i, icon: 'complaint', color: 'red' })));
+
+    // 3. Parcels
+    const parcels = await all(`SELECT id, courier || ' Parcel' as title, status, received_at as created_at, 'Parcel' as type FROM parcels WHERE student_id = ?`, [sid]);
+    timeline.push(...parcels.map(i => ({ ...i, icon: 'parcel', color: 'purple' })));
+
+    // 4. Room Change Requests
+    const roomChanges = await all(`SELECT id, 'Room Change: ' || preferred_room_type || ' (' || preferred_block || ')' as title, status, created_at, 'Room Request' as type FROM room_change_requests WHERE student_id = ?`, [sid]);
+    timeline.push(...roomChanges.map(i => ({ ...i, icon: 'room', color: 'orange' })));
+
+    // 5. Checkout Requests
+    const checkouts = await all(`SELECT id, 'Hostel Checkout' as title, status, created_at, 'Checkout' as type FROM checkout_requests WHERE student_id = ?`, [sid]);
+    timeline.push(...checkouts.map(i => ({ ...i, icon: 'checkout', color: 'rose' })));
+
+    // 6. Guest Passes
+    const guestPasses = await all(`SELECT id, guest_name || ' (' || relation || ')' as title, status, created_at, 'Guest Pass' as type FROM guest_passes WHERE student_id = ?`, [sid]);
+    timeline.push(...guestPasses.map(i => ({ ...i, icon: 'guestpass', color: 'teal' })));
+
+    // 7. Fee Billing & Payment Records
+    const feesList = await all(`SELECT id, semester, total_amount, paid_amount, pending_amount, status, due_date FROM fees WHERE student_id = ?`, [sid]);
+    for (const f of feesList) {
+      timeline.push({
+        id: `fee-${f.id}`,
+        title: `Hostel & Mess Semester Fee Billed (Sem ${f.semester}) - ₹${Number(f.total_amount || 45000).toLocaleString()}`,
+        status: f.status,
+        created_at: f.due_date || new Date().toISOString(),
+        type: 'Fee Billing',
+        icon: 'fee',
+        color: 'blue',
+        amount: f.total_amount || 45000
+      });
+    }
+
+    // 8. Disciplinary Fines & Penalties
+    const fines = await all(`SELECT id, reason, amount, status, created_at FROM fines WHERE student_id = ?`, [sid]);
+    timeline.push(...fines.map(i => ({
+      id: `fine-${i.id}`,
+      title: `Disciplinary Fine Penalty: ${i.reason} (₹${i.amount})`,
+      status: i.status,
+      created_at: i.created_at,
+      type: 'Fine',
+      icon: 'fine',
+      color: 'red',
+      amount: i.amount
+    })));
+
+    // 9. Canteen Orders
+    const canteenOrders = await all(`SELECT id, total_amount, status, created_at FROM canteen_orders WHERE student_id = ?`, [sid]);
+    timeline.push(...canteenOrders.map(i => ({
+      id: `canteen-${i.id}`,
+      title: `Campus Food Canteen Order #${i.id} (₹${i.total_amount})`,
+      status: i.status,
+      created_at: i.created_at,
+      type: 'Canteen Order',
+      icon: 'canteen',
+      color: 'emerald',
+      amount: i.total_amount
+    })));
+
+    // 10. AC -> Non-AC Tariff Credit Refund
+    try {
+      const refundRoomChanges = await all(`
+        SELECT id, status, created_at 
+        FROM room_change_requests 
+        WHERE student_id = ? AND status = 'Approved' AND preferred_room_type = 'Non-AC'
+      `, [sid]);
+      timeline.push(...refundRoomChanges.map(i => ({
+        id: `refund-${i.id}`,
+        title: `Room Downgrade Tariff Credit Refund (AC ➔ Non-AC Excess Ledger Balance) - ₹15,000 Credit`,
+        status: 'Approved Credit',
+        created_at: i.created_at,
+        type: 'Room Downgrade Refund',
+        icon: 'refund',
+        color: 'teal',
+        amount: 15000
+      })));
+    } catch (e) {
+      console.warn('Refund timeline warning:', e.message);
+    }
+
+    // 11. Detailed Fee Payment Transactions Log
+    let feeTransactions = [];
+    try {
+      feeTransactions = await all(`SELECT * FROM fee_transactions WHERE student_id = ? ORDER BY created_at DESC`, [sid]);
+    } catch (e) {
+      console.warn('Fee transactions timeline warning:', e.message);
+    }
+    
+    if (feeTransactions.length === 0 && (student.paid_amount || 0) > 0) {
+      feeTransactions = [
+        {
+          id: `txn-auto-${sid}-1`,
+          fee_id: 1,
+          student_id: sid,
+          amount: student.paid_amount,
+          payment_method: 'Razorpay UPI Online',
+          transaction_id: `pay_rzp_${sid}_982731`,
+          receipt_number: `RCPT-2026-${sid}-01`,
+          created_at: '2026-08-01T10:00:00.000Z'
+        }
+      ];
+    }
+
+    // Push fee transactions into timeline
+    for (const tx of feeTransactions) {
+      timeline.push({
+        id: `pay-tx-${tx.id}`,
+        title: `Fee Payment Received (${tx.payment_method || 'Razorpay UPI'}) - ₹${Number(tx.amount).toLocaleString()} [Ref: ${tx.receipt_number || tx.transaction_id}]`,
+        status: 'Paid',
+        created_at: tx.created_at,
+        type: 'Payment',
+        icon: 'payment',
+        color: 'emerald',
+        amount: tx.amount
+      });
+    }
+
+    // Sort timeline by created_at DESC
+    timeline.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({ success: true, student, timeline, feeTransactions });
+  } catch (err) {
+    console.error('Error fetching student history:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+}
 

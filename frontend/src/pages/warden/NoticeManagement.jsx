@@ -27,6 +27,7 @@ export default function NoticeManagement() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [file, setFile] = useState(null);
 
   const fetchNotices = async () => {
     try {
@@ -83,14 +84,25 @@ export default function NoticeManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setMsg('Uploading data...');
     try {
+      let finalData = { ...formData };
+      if (file) {
+        const uploadResult = await api.uploadFile(file);
+        if (uploadResult.success) {
+          finalData.attachment_url = uploadResult.fileUrl;
+          finalData.attachment_type = uploadResult.type;
+        }
+      }
+
       if (editingNotice) {
-        await api.updateNotice(editingNotice.id, formData);
+        await api.updateNotice(editingNotice.id, finalData);
         setMsg('Notice updated successfully.');
       } else {
-        await api.createNotice(formData);
+        await api.createNotice(finalData);
         setMsg('New notice published across resident portals.');
       }
+      setFile(null);
       setModalOpen(false);
       fetchNotices();
     } catch (err) {
@@ -274,6 +286,17 @@ export default function NoticeManagement() {
             </div>
           </div>
 
+          
+          <div className="col-span-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Attach Image/Video/PDF (Optional)
+            </label>
+            <input
+              type="file"
+              onChange={(e) => setFile(e.target.files[0])}
+              className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 bg-slate-50 focus:ring-2 focus:ring-purple-600 focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+            />
+          </div>
           <div className="pt-2 flex justify-end gap-2">
             <button
               type="button"

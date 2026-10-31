@@ -5,9 +5,13 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 export async function getDashboard(req, res) {
   try {
     const student = await get(`
-      SELECT s.*, u.name, u.email, u.phone, u.avatar_url
+      SELECT s.*, u.name, u.email, u.phone, u.avatar_url,
+             ct.name as caretaker_name, ct.phone as caretaker_phone, ct.email as caretaker_email,
+             ct.staff_id as caretaker_staff_id, ct.shift as caretaker_shift, ct.duty_role as caretaker_role,
+             ct.assigned_block as caretaker_block, ct.floor as caretaker_floor
       FROM students s
       JOIN users u ON u.id = s.user_id
+      LEFT JOIN caretakers ct ON ct.id = s.caretaker_id
       WHERE s.user_id = ?
     `, [req.user.id]);
 
@@ -64,6 +68,14 @@ export async function getDashboard(req, res) {
     // Recent gate pass
     const gatePass = await get('SELECT * FROM gate_passes WHERE student_id = ? ORDER BY created_at DESC LIMIT 1', [student.id]);
 
+    // Latest Depression / Wellness Screening Status
+    const latestWellness = await get(`
+      SELECT id, total_score, severity, status, counselor_name, session_time, session_venue, admin_notes, approved_at, created_at
+      FROM depression_screenings
+      WHERE student_id = ? OR user_id = ? OR roll_number = ? COLLATE NOCASE
+      ORDER BY id DESC LIMIT 1
+    `, [student.id, student.user_id, student.roll_number]);
+
     res.json({
       success: true,
       dashboard: {
@@ -90,7 +102,13 @@ export async function getDashboard(req, res) {
         },
         todayMenu,
         notices,
-        gatePass
+        gatePass,
+        latestWellness: latestWellness ? {
+          ...latestWellness,
+          displayMessage: latestWellness.status === 'Approved'
+            ? 'Your details are verified by counselor. They will call you soon.'
+            : 'Your details are being reviewed by the counselor.'
+        } : null
       }
     });
   } catch (err) {

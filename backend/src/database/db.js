@@ -133,7 +133,22 @@ function setupSqliteSchema(db) {
       pincode TEXT DEFAULT '110016',
       checkin_date DATE,
       status TEXT NOT NULL DEFAULT 'active',
+      caretaker_id INTEGER REFERENCES caretakers(id),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS caretakers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      staff_id TEXT UNIQUE NOT NULL,
+      phone TEXT,
+      email TEXT,
+      shift TEXT DEFAULT 'Full Time',
+      assigned_block TEXT,
+      floor TEXT DEFAULT 'All Floors',
+      duty_role TEXT DEFAULT 'Hostel Resident Caretaker',
+      avatar_url TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS wardens (
@@ -441,6 +456,45 @@ function setupSqliteSchema(db) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS depression_screenings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER,
+      user_id INTEGER,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT,
+      roll_number TEXT,
+      block_name TEXT,
+      room_number TEXT,
+      total_score INTEGER NOT NULL,
+      severity TEXT NOT NULL,
+      answers_json TEXT NOT NULL,
+      notes TEXT,
+      counseling_requested INTEGER DEFAULT 1,
+      preferred_mode TEXT DEFAULT 'In-Person',
+      status TEXT DEFAULT 'Pending',
+      admin_notes TEXT,
+      session_time DATETIME,
+      counselor_name TEXT,
+      session_venue TEXT,
+      approved_by_user_id INTEGER,
+      approved_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS email_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body_preview TEXT,
+      type TEXT,
+      status TEXT,
+      error_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Run dynamic schema migrations for fees table
@@ -527,37 +581,37 @@ function setupSqliteSchema(db) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      // Seed overdue fees for Student 2 (Rohan Patel)
+      // Seed overdue fees for Student 2 (Rohan Patel) - 14 days @ ₹100/day = ₹1400
       const f2 = sqliteDb.prepare('SELECT id FROM fees WHERE student_id = 2').get();
       if (f2) {
         sqliteDb.prepare(`
           UPDATE fees 
-          SET due_date = '2026-09-01', late_fine = 700.0, days_overdue = 14, pending_amount = 45700.0, status = 'Overdue' 
+          SET due_date = '2026-09-01', late_fine = 1400.0, days_overdue = 14, pending_amount = 46400.0, status = 'Overdue' 
           WHERE id = ?
         `).run(f2.id);
-        insFine.run(2, f2.id, 'Late Fee', 700.0, '14 days overdue for Semester 6 Hostel Fee', 'Unpaid', 14, 1, '2026-09-02');
+        insFine.run(2, f2.id, 'Late Fee', 1400.0, '14 days overdue for Semester 6 Hostel Fee (@ ₹100/day)', 'Unpaid', 14, 1, '2026-09-02');
       }
 
-      // Seed overdue fees for Student 4 (Vikram Patel)
+      // Seed overdue fees for Student 4 (Vikram Patel) - 10 days @ ₹100/day = ₹1000
       const f4 = sqliteDb.prepare('SELECT id FROM fees WHERE student_id = 4').get();
       if (f4) {
         sqliteDb.prepare(`
           UPDATE fees 
-          SET due_date = '2026-09-05', late_fine = 500.0, days_overdue = 10, pending_amount = 15500.0, status = 'Overdue' 
+          SET due_date = '2026-09-05', late_fine = 1000.0, days_overdue = 10, pending_amount = 16000.0, status = 'Overdue' 
           WHERE id = ?
         `).run(f4.id);
-        insFine.run(4, f4.id, 'Late Fee', 500.0, '10 days overdue for Semester 2 Balance', 'Unpaid', 10, 1, '2026-09-06');
+        insFine.run(4, f4.id, 'Late Fee', 1000.0, '10 days overdue for Semester 2 Balance (@ ₹100/day)', 'Unpaid', 10, 1, '2026-09-06');
       }
 
-      // Seed overdue fees for Student 5 (Karan Joshi)
+      // Seed overdue fees for Student 5 (Karan Joshi) - 11 days @ ₹100/day = ₹1100
       const f5 = sqliteDb.prepare('SELECT id FROM fees WHERE student_id = 5').get();
       if (f5) {
         sqliteDb.prepare(`
           UPDATE fees 
-          SET due_date = '2026-09-04', late_fine = 550.0, days_overdue = 11, pending_amount = 45550.0, status = 'Overdue' 
+          SET due_date = '2026-09-04', late_fine = 1100.0, days_overdue = 11, pending_amount = 46100.0, status = 'Overdue' 
           WHERE id = ?
         `).run(f5.id);
-        insFine.run(5, f5.id, 'Late Fee', 550.0, '11 days overdue for Semester 3 Hostel Fee', 'Unpaid', 11, 1, '2026-09-05');
+        insFine.run(5, f5.id, 'Late Fee', 1100.0, '11 days overdue for Semester 3 Hostel Fee (@ ₹100/day)', 'Unpaid', 11, 1, '2026-09-05');
       }
 
       // Disciplinary Curfew Fine for Student 7 (Aditya Rao)
@@ -632,12 +686,86 @@ function setupSqliteSchema(db) {
       insertMarketItem.run(5, 2, 'Symphony Personal Room Cooler 12L + Mosquito Net', 'Room Appliances', 1500.0, 'Good', 'Compact honeycomb cooling pads personal cooler. Super low power consumption, ideal for room B-204.', 'https://images.unsplash.com/photo-1585338107529-13afc5f02586?w=400', 'Available');
       insertMarketItem.run(6, 3, 'Portronics Folding Wooden Bed Study Table with Cup Holder', 'Furniture & Storage', 300.0, 'Like New', 'Solid engineered wood top with tablet/phone slot & Anti-skid L-shaped legs.', 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=400', 'Available');
       insertMarketItem.run(7, 1, 'Yonex Muscle Power 29 Badminton Racket + Full Cover', 'Sports & Fitness', 450.0, 'Good', 'Isometric head frame, strung at 24 lbs. Comes with Yonex thermal padded cover.', 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=400', 'Available');
-      insertMarketItem.run(8, 2, 'Milton Thermosteel 1L Flask + Prestige 1.5L Electric Kettle', 'Hostel Essentials', 400.0, 'Like New', 'Boils water in 2 minutes. Stainless steel double-wall vacuum flask keeps tea hot for 18 hours.', 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=400', 'Available');
     }
   } catch (err) {
     console.warn('Marketplace seeding error:', err.message);
   }
 
+  // Ensure caretakers table is seeded with all 15 block/floor caretakers
+  try {
+    const countCaretakers = sqliteDb.prepare('SELECT COUNT(*) as count FROM caretakers').get().count;
+    if (countCaretakers === 0) {
+      console.log('Seeding initial 15 hostel caretakers across all blocks and shifts...');
+      const insertCaretaker = sqliteDb.prepare(`
+        INSERT INTO caretakers (id, name, staff_id, phone, email, shift, assigned_block, floor, duty_role)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const defaultCaretakers = [
+        [1, 'Ramesh Kumar', 'CT-101', '+91-9876511001', 'ramesh.caretaker@hostel.com', 'Morning Shift (6 AM - 2 PM)', 'Block A (Aryabhata)', 'Ground Floor & 1st Floor', 'Senior Hostel Caretaker'],
+        [2, 'Sunita Devi', 'CT-102', '+91-9876511002', 'sunita.caretaker@hostel.com', 'Morning Shift (6 AM - 2 PM)', 'Block A (Gargi)', 'Ground Floor & 1st Floor', 'Girls Wing Resident Caretaker'],
+        [3, 'Mohan Singh', 'CT-103', '+91-9876511003', 'mohan.caretaker@hostel.com', 'Evening Shift (2 PM - 10 PM)', 'Block B (Bhaskara)', '1st & 2nd Floor', 'Facility & Room Support Caretaker'],
+        [4, 'Anil Sharma', 'CT-104', '+91-9876511004', 'anil.caretaker@hostel.com', 'Night Shift (10 PM - 6 AM)', 'Block A (Aryabhata)', 'All Floors', 'Night Duty Caretaker & Security'],
+        [5, 'Suresh Yadav', 'CT-105', '+91-9876511005', 'suresh.caretaker@hostel.com', 'Morning Shift (6 AM - 2 PM)', 'Block C (Charaka)', 'Ground & 1st Floor', 'Resident Block Caretaker'],
+        [6, 'Anita Verma', 'CT-106', '+91-9876511006', 'anita.caretaker@hostel.com', 'Evening Shift (2 PM - 10 PM)', 'Block B (Maitreyi)', 'All Floors', 'Girls Hostel Caretaker'],
+        [7, 'Rajendra Prasad', 'CT-107', '+91-9876511007', 'rajendra.caretaker@hostel.com', 'Full Time', 'Block D (Ramanujan)', 'Ground & 1st Floor', 'Block Supervisor Caretaker'],
+        [8, 'Geeta Rani', 'CT-108', '+91-9876511008', 'geeta.caretaker@hostel.com', 'Full Time', 'Block C (Sarojini)', 'All Floors', 'Senior Girls Hostel Caretaker'],
+        [9, 'Vikramjit Singh', 'CT-109', '+91-9876511009', 'vikramjit.caretaker@hostel.com', 'Morning Shift (6 AM - 2 PM)', 'Block B (Bhaskara)', 'Ground Floor', 'Maintenance & Key Caretaker'],
+        [10, 'Pooja Sharma', 'CT-110', '+91-9876511010', 'pooja.caretaker@hostel.com', 'Evening Shift (2 PM - 10 PM)', 'Block A (Gargi)', '2nd & 3rd Floor', 'Floor Support Caretaker'],
+        [11, 'Dharmendra Pal', 'CT-111', '+91-9876511011', 'dharmendra.caretaker@hostel.com', 'Night Shift (10 PM - 6 AM)', 'Block C (Charaka)', 'All Floors', 'Night Escort Caretaker'],
+        [12, 'Meena Devi', 'CT-112', '+91-9876511012', 'meena.caretaker@hostel.com', 'Morning Shift (6 AM - 2 PM)', 'Block B (Maitreyi)', 'Ground Floor', 'Sanitation & Welfare Caretaker'],
+        [13, 'Santosh Kumar', 'CT-113', '+91-9876511013', 'santosh.caretaker@hostel.com', 'Evening Shift (2 PM - 10 PM)', 'Block D (Ramanujan)', '2nd Floor', 'Facility Caretaker'],
+        [14, 'Sarita Joshi', 'CT-114', '+91-9876511014', 'sarita.caretaker@hostel.com', 'Full Time', 'Block C (Sarojini)', '1st & 2nd Floor', 'Resident Assistant Caretaker'],
+        [15, 'Harish Chandra', 'CT-115', '+91-9876511015', 'harish.caretaker@hostel.com', 'Morning Shift (6 AM - 2 PM)', 'Block A (Aryabhata)', '2nd & 3rd Floor', 'Senior Resident Caretaker']
+      ];
+      for (const row of defaultCaretakers) {
+        insertCaretaker.run(...row);
+      }
+    }
+  } catch (err) {
+    console.warn('Caretakers seeding error:', err.message);
+  }
+
+  // Ensure any students with NULL caretaker_id are automatically mapped to their block & floor caretaker
+  try {
+    const unassignedCount = sqliteDb.prepare('SELECT COUNT(*) as count FROM students WHERE caretaker_id IS NULL').get().count;
+    if (unassignedCount > 0) {
+      console.log(`Auto-assigning realistic caretakers to ${unassignedCount} students...`);
+      const unassignedStudents = sqliteDb.prepare(`
+        SELECT s.id as student_id, s.gender, blk.name as block_name, r.floor
+        FROM students s
+        LEFT JOIN room_allocations ra ON ra.student_id = s.id AND ra.status = 'active'
+        LEFT JOIN beds bd ON ra.bed_id = bd.id
+        LEFT JOIN rooms r ON bd.room_id = r.id
+        LEFT JOIN blocks blk ON r.block_id = blk.id
+        WHERE s.caretaker_id IS NULL
+      `).all();
+
+      const updateCaretaker = sqliteDb.prepare('UPDATE students SET caretaker_id = ? WHERE id = ?');
+      for (const st of unassignedStudents) {
+        let cid = 1;
+        if (st.block_name === 'Block A (Aryabhata)') {
+          cid = st.floor === 1 ? 1 : (st.floor <= 3 ? 15 : 4);
+        } else if (st.block_name === 'Block A (Gargi)') {
+          cid = st.floor <= 2 ? 2 : 10;
+        } else if (st.block_name === 'Block B (Bhaskara)') {
+          cid = st.floor <= 2 ? 9 : 3;
+        } else if (st.block_name === 'Block B (Maitreyi)') {
+          cid = st.floor <= 2 ? 12 : 6;
+        } else if (st.block_name === 'Block C (Charaka)') {
+          cid = st.floor <= 2 ? 5 : 11;
+        } else if (st.block_name === 'Block C (Sarojini)') {
+          cid = st.floor <= 2 ? 14 : 8;
+        } else if (st.block_name === 'Block D (Ramanujan)') {
+          cid = st.floor <= 2 ? 7 : 13;
+        } else {
+          cid = (st.gender === 'Female' || st.gender === 'female') ? 2 : 1;
+        }
+        updateCaretaker.run(cid, st.student_id);
+      }
+    }
+  } catch (err) {
+    console.warn('Student caretaker auto-assignment error:', err.message);
+  }
 }
 
 function seedSqliteData(db) {

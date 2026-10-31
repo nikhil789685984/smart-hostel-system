@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../services/api';
 import Modal from '../../components/ui/Modal';
+import QRCode from 'react-qr-code';
 import {
   QrCode,
   Calendar,
@@ -674,7 +675,12 @@ export default function StudentGatePass() {
         {selectedQrPass && (
           <div className="py-4 flex flex-col items-center justify-center text-center space-y-4">
             <div className="p-4 bg-white border-4 border-slate-900 rounded-3xl shadow-xl">
-              <QrCode className="w-48 h-48 text-slate-900" />
+              <QRCode 
+                value={JSON.stringify({type: 'GATE', id: selectedQrPass.id})} 
+                size={192} 
+                style={{ height: "auto", maxWidth: "100%", width: "100%" }} 
+                viewBox={`0 0 192 192`} 
+              />
             </div>
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Cryptographic Token</span>

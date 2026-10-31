@@ -329,7 +329,7 @@ export async function getWardenMessRoster(req, res) {
 
     // Total enrolled active students
     const totalStudentsRow = await get("SELECT COUNT(*) as count FROM students WHERE status = 'active'");
-    const totalStudents = totalStudentsRow?.count || 115;
+    const totalStudents = totalStudentsRow?.count || 800;
 
     // Headcounts per meal for the date
     const counts = await all(`

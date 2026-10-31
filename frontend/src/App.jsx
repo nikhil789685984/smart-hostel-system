@@ -6,11 +6,14 @@ import { Loader2 } from "lucide-react";
 // Navigation & Layout
 import Navbar from "./components/layout/Navbar";
 import Sidebar from "./components/layout/Sidebar";
+import MobileBottomNav from "./components/layout/MobileBottomNav";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 
 // Student Pages
+const StudyHub = lazy(() => import("./pages/student/StudyHub"));
+const FeeGovernance = lazy(() => import("./pages/admin/FeeGovernance"));
 const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
 const StudentRoom = lazy(() => import("./pages/student/StudentRoom"));
 const StudentComplaints = lazy(() => import("./pages/student/StudentComplaints"));
@@ -18,9 +21,14 @@ const StudentMess = lazy(() => import("./pages/student/StudentMess"));
 const StudentGatePass = lazy(() => import("./pages/student/StudentGatePass"));
 const StudentFees = lazy(() => import("./pages/student/StudentFees"));
 const StudentAssistant = lazy(() => import("./pages/student/StudentAssistant"));
+const StudentRickshaw = lazy(() => import("./pages/student/StudentRickshaw"));
 const StudentNotices = lazy(() => import("./pages/student/StudentNotices"));
 const ReportWarden = lazy(() => import("./pages/student/ReportWarden"));
 const ReportMess = lazy(() => import("./pages/student/ReportMess"));
+const LostAndFound = lazy(() => import("./pages/student/LostAndFound"));
+const StudentParcels = lazy(() => import("./pages/student/StudentParcels"));
+const WellnessHub = lazy(() => import("./pages/student/WellnessHub"));
+const WellnessManagement = lazy(() => import("./pages/admin/WellnessManagement"));
 
 // Warden Pages
 const WardenDashboard = lazy(() => import("./pages/warden/WardenDashboard"));
@@ -32,19 +40,33 @@ const MessManagement = lazy(() => import("./pages/warden/MessManagement"));
 const NoticeManagement = lazy(() => import("./pages/warden/NoticeManagement"));
 const WardenAnalytics = lazy(() => import("./pages/warden/WardenAnalytics"));
 const HostelCheckoutRequests = lazy(() => import("./pages/warden/HostelCheckoutRequests"));
+const ManageGuestPasses = lazy(() => import("./pages/warden/ManageGuestPasses"));
+const SecurityScanner = lazy(() => import("./pages/warden/SecurityScanner"));
+const ManageLostFound = lazy(() => import("./pages/warden/ManageLostFound"));
+const ManageParcels = lazy(() => import("./pages/warden/ManageParcels"));
 
 // Admin Pages
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const GlobalSearch = lazy(() => import("./pages/admin/GlobalSearch"));
+const FileVideoShare = lazy(() => import("./pages/admin/FileVideoShare"));
+const VideoCallCenter = lazy(() => import("./pages/admin/VideoCallCenter"));
+
 const ManageStudents = lazy(() => import("./pages/admin/ManageStudents"));
+const StudentHistory = lazy(() => import("./pages/admin/StudentHistory"));
 const ManageWardens = lazy(() => import("./pages/admin/ManageWardens"));
 const ManageRooms = lazy(() => import("./pages/admin/ManageRooms"));
 const SmartAnalytics = lazy(() => import("./pages/admin/SmartAnalytics"));
 const AdminComplaintDetails = lazy(() => import("./pages/admin/AdminComplaintDetails"));
+const AdminCommandCenter = lazy(() => import("./pages/admin/AdminCommandCenter"));
 
 // Common Staff Pages
 const StaffMessages = lazy(() => import("./pages/common/StaffMessages"));
 const HostelLeaderboard = lazy(() => import("./pages/shared/HostelLeaderboard"));
 const HostelMarketplace = lazy(() => import("./pages/shared/HostelMarketplace"));
+const LiveNoiseHeatmap = lazy(() => import("./pages/shared/LiveNoiseHeatmap"));
+const EcoLeaderboard = lazy(() => import("./pages/shared/EcoLeaderboard"));
+const NightCanteen = lazy(() => import("./pages/student/NightCanteen"));
+const GuestPass = lazy(() => import("./pages/student/GuestPass"));
 
 
 
@@ -96,7 +118,7 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   return (
-    <div className="h-screen w-full bg-slate-50/50 flex overflow-hidden font-sans relative">
+    <div className="min-h-[100dvh] h-[100dvh] w-full bg-slate-50/50 flex overflow-hidden font-sans relative">
       {/* Animated Abstract UI Background */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-400/20 blur-[120px]" />
@@ -107,8 +129,8 @@ const Layout = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col w-full min-w-0 relative z-10 transition-all duration-300">
         <Navbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} isSidebarOpen={sidebarOpen} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth lg:pl-64">
-          <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8 min-h-full">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth lg:pl-64 pb-20 md:pb-6">
+          <div className="max-w-[1600px] mx-auto p-3 sm:p-6 lg:p-8 min-h-full">
             <Suspense fallback={
               <div className="h-[60vh] flex flex-col items-center justify-center">
                 <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
@@ -119,6 +141,12 @@ const Layout = () => {
             </Suspense>
           </div>
         </main>
+
+        {/* Thumb-Accessible Mobile Bottom Navigation */}
+        <MobileBottomNav
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          isSidebarOpen={sidebarOpen}
+        />
       </div>
     </div>
   );
@@ -133,6 +161,8 @@ export default function App() {
           <Route path="/" element={<RootRoute />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/depression-test" element={<WellnessHub />} />
+          <Route path="/wellness" element={<WellnessHub />} />
           
           {/* App Shell with Sidebar */}
           <Route element={<Layout />}>
@@ -143,6 +173,7 @@ export default function App() {
             
             {/* Student Routes */}
             <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
+              <Route path="/student/study-hub" element={<StudyHub />} />
               <Route path="/student/dashboard" element={<StudentDashboard />} />
               <Route path="/student/room" element={<StudentRoom />} />
               <Route path="/student/complaints" element={<StudentComplaints />} />
@@ -151,15 +182,18 @@ export default function App() {
               <Route path="/student/gate-pass" element={<StudentGatePass />} />
               <Route path="/student/fees" element={<StudentFees />} />
               <Route path="/student/ai-assistant" element={<StudentAssistant />} />
+              <Route path="/student/rickshaw" element={<StudentRickshaw />} />
               <Route path="/student/assistant" element={<Navigate to="/student/ai-assistant" replace />} />
               <Route path="/student/notices" element={<StudentNotices />} />
               <Route path="/student/report-warden" element={<ReportWarden />} />
               <Route path="/student/report-mess" element={<ReportMess />} />
               <Route path="/student/leaderboard" element={<HostelLeaderboard />} />
+              <Route path="/student/wellness" element={<WellnessHub />} />
             </Route>
             
             {/* Warden Routes */}
             <Route element={<ProtectedRoute allowedRoles={["warden"]} />}>
+              <Route path="/warden/fees" element={<FeeGovernance />} />
               <Route path="/warden/dashboard" element={<WardenDashboard />} />
               <Route path="/warden/students" element={<ManageStudents />} />
               <Route path="/warden/checkout-requests" element={<HostelCheckoutRequests />} />
@@ -168,18 +202,28 @@ export default function App() {
               <Route path="/warden/complaints" element={<ComplaintManagement />} />
               <Route path="/warden/complaints/:id" element={<AdminComplaintDetails />} />
               <Route path="/warden/gate-passes" element={<GatePassManagement />} />
+              <Route path="/warden/guest-passes" element={<ManageGuestPasses />} />
+              <Route path="/warden/lost-found" element={<ManageLostFound />} />
+              <Route path="/warden/parcels" element={<ManageParcels />} />
+              <Route path="/warden/scanner" element={<SecurityScanner />} />
               <Route path="/warden/room-requests" element={<RoomRequests />} />
               <Route path="/warden/mess" element={<MessManagement />} />
               <Route path="/warden/notices" element={<NoticeManagement />} />
               <Route path="/warden/analytics" element={<WardenAnalytics />} />
               <Route path="/warden/messages" element={<StaffMessages />} />
               <Route path="/warden/leaderboard" element={<HostelLeaderboard />} />
+              <Route path="/warden/wellness" element={<WellnessManagement />} />
             </Route>
 
             {/* Admin Routes */}
             <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+              <Route path="/admin/fees" element={<FeeGovernance />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+
+              <Route path="/admin/command-center" element={<AdminCommandCenter />} />
+              <Route path="/admin/parcels" element={<ManageParcels />} />
               <Route path="/admin/students" element={<ManageStudents />} />
+              <Route path="/admin/student-history" element={<StudentHistory />} />
               <Route path="/admin/checkout-requests" element={<HostelCheckoutRequests />} />
               <Route path="/admin/wardens" element={<ManageWardens />} />
               <Route path="/admin/rooms" element={<ManageRooms />} />
@@ -190,17 +234,28 @@ export default function App() {
               <Route path="/admin/mess" element={<MessManagement />} />
               <Route path="/admin/notices" element={<NoticeManagement />} />
               <Route path="/admin/gate-passes" element={<GatePassManagement />} />
+              <Route path="/admin/guest-passes" element={<ManageGuestPasses />} />
               <Route path="/admin/messages" element={<StaffMessages />} />
               <Route path="/admin/leaderboard" element={<HostelLeaderboard />} />
+              <Route path="/admin/wellness" element={<WellnessManagement />} />
             </Route>
             
             {/* Shared Routes */}
             <Route element={<ProtectedRoute allowedRoles={["student", "warden", "admin"]} />}>
+              <Route path="/study-hub" element={<StudyHub />} />
+              <Route path="/admin/study-hub" element={<StudyHub />} />
+              <Route path="/warden/study-hub" element={<StudyHub />} />
+              <Route path="/noise-heatmap" element={<LiveNoiseHeatmap />} />
               <Route path="/leaderboard" element={<HostelLeaderboard />} />
               <Route path="/marketplace" element={<HostelMarketplace />} />
-              <Route path="/student/marketplace" element={<HostelMarketplace />} />
+              <Route path="/eco-leaderboard" element={<EcoLeaderboard />} />
+              <Route path="/canteen" element={<NightCanteen />} />
+              <Route path="/guest-pass" element={<GuestPass />} />
+              <Route path="/student/lost-found" element={<LostAndFound />} />
+              <Route path="/student/parcels" element={<StudentParcels />} />
               <Route path="/warden/marketplace" element={<HostelMarketplace />} />
               <Route path="/admin/marketplace" element={<HostelMarketplace />} />
+              <Route path="/wellness-hub" element={<WellnessHub />} />
             </Route>
 
 

@@ -34,13 +34,18 @@ export async function login(req, res) {
       studentData = await get(`
         SELECT s.*, 
                r.room_number, r.floor, r.room_type, r.fee_per_semester,
-               b.bed_number, blk.name as block_name, h.name as hostel_name
+               b.bed_number, blk.name as block_name, h.name as hostel_name,
+               ct.name as caretaker_name, ct.phone as caretaker_phone, ct.email as caretaker_email,
+               ct.staff_id as caretaker_staff_id, ct.shift as caretaker_shift, ct.duty_role as caretaker_role,
+               ct.assigned_block as caretaker_block, ct.floor as caretaker_floor,
+               (SELECT wu.name FROM wardens w JOIN users wu ON wu.id = w.user_id WHERE w.assigned_hostel_id = h.id LIMIT 1) as warden_name
         FROM students s
         LEFT JOIN room_allocations ra ON ra.student_id = s.id AND ra.status = 'active'
         LEFT JOIN beds b ON b.id = ra.bed_id
         LEFT JOIN rooms r ON r.id = b.room_id
         LEFT JOIN blocks blk ON blk.id = r.block_id
         LEFT JOIN hostels h ON h.id = blk.hostel_id
+        LEFT JOIN caretakers ct ON ct.id = s.caretaker_id
         WHERE s.user_id = ?
       `, [user.id]);
     } else if (user.role === 'warden') {

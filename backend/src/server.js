@@ -1,3 +1,5 @@
+import dns from 'dns';
+dns.setDefaultResultOrder('ipv4first');
 import express from 'express';
 import cors from 'cors';
 import { config } from './config.js';
@@ -9,6 +11,7 @@ import roomRoutes from './routes/roomRoutes.js';
 import complaintRoutes from './routes/complaintRoutes.js';
 import messRoutes from './routes/messRoutes.js';
 import noticeRoutes from './routes/noticeRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 import feeRoutes from './routes/feeRoutes.js';
 import salaryRoutes from "./routes/salaryRoutes.js";
 
@@ -16,21 +19,42 @@ import gatePassRoutes from './routes/gatePassRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import parcelRoutes from './routes/parcelRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import leaderboardRoutes from './routes/leaderboardRoutes.js';
 import marketplaceRoutes from './routes/marketplaceRoutes.js';
+import zoneRoutes from './routes/zoneRoutes.js';
+import ecoRoutes from './routes/ecoRoutes.js';
+import canteenRoutes from './routes/canteenRoutes.js';
+import guestRoutes from './routes/guestRoutes.js';
+import scannerRoutes from './routes/scannerRoutes.js';
+import lostFoundRoutes from './routes/lostFoundRoutes.js';
+import commandCenterRoutes from './routes/commandCenterRoutes.js';
+import studyHubRoutes from './routes/studyHubRoutes.js';
+import wellnessRoutes from './routes/wellnessRoutes.js';
+import { initZoneTables } from './controllers/zoneController.js';
+import { initLostFoundDB } from './controllers/lostFoundController.js';
+import { initStudyHubDB } from './controllers/studyHubController.js';
+import { startAutoPaySimulation } from './services/autoPaySimulation.js';
 
 
 
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import fs from 'fs';
+import compression from 'compression';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const distPath = path.join(__dirname, '../../frontend/dist');
+const localDist = path.join(__dirname, '../dist');
+const distPath = fs.existsSync(localDist) ? localDist : path.join(__dirname, '../../frontend/dist');
 
 const app = express();
+
+// High performance gzip compression (reduces payload by 75-80%)
+app.use(compression({ threshold: 512 }));
 
 // Middleware
 app.use(cors({
@@ -72,25 +96,48 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/mess', messRoutes);
 app.use('/api/notices', noticeRoutes);
+app.use('/api/upload', uploadRoutes);
 app.use('/api/fees', feeRoutes);
 app.use('/api/gate-passes', gatePassRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/parcels', parcelRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/salary', salaryRoutes);
+app.use('/api/zones', zoneRoutes);
+app.use('/api/eco', ecoRoutes);
+app.use('/api/canteen', canteenRoutes);
+app.use('/api/guest', guestRoutes);
+app.use('/api/scanner', scannerRoutes);
+app.use('/api/lost-found', lostFoundRoutes);
+app.use('/api/admin/command-center', commandCenterRoutes);
+app.use('/api/study-hub', studyHubRoutes);
+app.use('/api/wellness', wellnessRoutes);
 
 
 
-// Serve frontend production build statically
-app.use(express.static(distPath));
+// Serve uploaded files statically from backend/uploads and fallback to root uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+// Serve frontend production build statically with browser caching
+app.use(express.static(distPath, {
+  maxAge: '7d',
+  immutable: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    }
+  }
+}));
 
 // For all non-API requests, send index.html (Single Page App routing)
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
@@ -116,6 +163,10 @@ async function bootstrap() {
   try {
     console.log(' Starting Apex Smart Hostel Management Backend...');
     await initDb();
+    await initZoneTables();
+    await initLostFoundDB();
+    await initStudyHubDB();
+    startAutoPaySimulation();
 
     app.listen(config.port, '0.0.0.0', () => {
       console.log(`🚀 Smart Hostel Backend Server listening on http://0.0.0.0:${config.port}`);

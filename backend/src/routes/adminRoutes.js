@@ -14,9 +14,11 @@ import {
   getMyCheckoutRequest,
   getAllCheckoutRequests,
   processCheckoutRequest,
-  cancelCheckoutRequest
+  cancelCheckoutRequest,
+  getStudentHistory
 } from '../controllers/adminController.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
+import { globalSearch } from '../controllers/searchController.js';
 
 const router = Router();
 
@@ -32,8 +34,8 @@ router.post('/students/checkout-requests/:id/cancel', cancelCheckoutRequest);
 router.delete('/students/checkout-requests/:id', cancelCheckoutRequest);
 
 
-// Wardens and admins can view students and process hostel checkout
 router.get('/students', requireRole(['admin', 'warden']), getAllStudents);
+router.get('/student-history/:studentId', requireRole(['admin', 'warden', 'student']), getStudentHistory);
 router.post('/students', requireRole(['admin', 'warden']), createStudent);
 router.put('/students/:id', requireRole(['admin', 'warden']), updateStudent);
 router.post('/students/:id/checkout', requireRole(['admin', 'warden']), checkoutStudent);
@@ -47,3 +49,5 @@ router.get('/warden-complaints', requireRole(['admin']), getWardenComplaints);
 router.get('/mess-complaints', requireRole(['admin']), getAdminMessComplaints);
 
 export default router;
+
+router.get('/global-search', requireRole(['admin']), globalSearch);

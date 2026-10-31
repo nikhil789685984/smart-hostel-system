@@ -21,52 +21,33 @@ export async function getMyFees(req, res) {
       fee = await get('SELECT * FROM fees WHERE student_id = ?', [student.id]);
     }
 
-    // Check if fee is overdue & calculate late fine
+    // Check if fee is overdue & calculate late fine strictly at ₹100/day
     const today = new Date().toISOString().split('T')[0];
     const dueDate = fee.due_date;
-    let lateFine = fee.late_fine || 0;
-    let daysOverdue = fee.days_overdue || 0;
+    const basePending = Math.max(0, (fee.total_amount || 45000) - (fee.paid_amount || 0));
 
-    if (dueDate < today && (fee.total_amount - fee.paid_amount) > 0 && fee.status !== 'Paid') {
+    if (dueDate && dueDate < today && basePending > 0) {
       const diffMs = new Date(today).getTime() - new Date(dueDate).getTime();
-      daysOverdue = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-      lateFine = daysOverdue * 100; // ₹100 per day overdue (requested by user)
-      
-      const newPending = (fee.total_amount - fee.paid_amount) + lateFine;
-      await run(`
-        UPDATE fees 
-        SET late_fine = ?, days_overdue = ?, pending_amount = ?, status = 'Overdue'
-        WHERE id = ?
-      `, [lateFine, daysOverdue, newPending, fee.id]);
+      const calculatedDays = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      const calculatedFine = calculatedDays * 100; // Strictly ₹100 per overdue day
 
-      // Check or update in fines table
-      const existingFine = await get("SELECT id FROM fines WHERE fee_id = ? AND status = 'Unpaid'", [fee.id]);
-      if (!existingFine) {
+      if (fee.late_fine !== calculatedFine || fee.days_overdue !== calculatedDays) {
+        const newTotalPending = basePending + calculatedFine;
         await run(`
-          INSERT INTO fines (student_id, fee_id, type, amount, reason, status, days_overdue, issued_by_user_id, issued_date)
-          VALUES (?, ?, 'Late Fee', ?, ?, 'Unpaid', ?, 1, date('now'))
-        `, [student.id, fee.id, lateFine, `${daysOverdue} days overdue past ${dueDate} for Semester ${fee.semester} fees`, daysOverdue]);
-
-        // Send alert notification to student
-        await createNotification(
-          req.user.id,
-          '⚠️ Overdue Late Fine Levied',
-          `A late fee penalty of ₹${lateFine} has been assessed due to ${daysOverdue} days overdue fee payment. Please pay immediately.`,
-          'fine',
-          '/student/fees'
-        );
-      } else {
-        await run(`
-          UPDATE fines 
-          SET amount = ?, days_overdue = ?, reason = ?
+          UPDATE fees 
+          SET late_fine = ?, days_overdue = ?, pending_amount = ?, status = 'Overdue'
           WHERE id = ?
-        `, [lateFine, daysOverdue, `${daysOverdue} days overdue past ${dueDate} for Semester ${fee.semester} fees`, existingFine.id]);
-      }
+        `, [calculatedFine, calculatedDays, newTotalPending, fee.id]);
 
-      fee.late_fine = lateFine;
-      fee.days_overdue = daysOverdue;
-      fee.pending_amount = newPending;
-      fee.status = 'Overdue';
+        fee.late_fine = calculatedFine;
+        fee.days_overdue = calculatedDays;
+        fee.pending_amount = newTotalPending;
+        fee.status = 'Overdue';
+      }
+    } else if (fee.paid_amount >= fee.total_amount && fee.late_fine > 0) {
+      await run(`UPDATE fees SET late_fine = 0, days_overdue = 0 WHERE id = ?`, [fee.id]);
+      fee.late_fine = 0;
+      fee.days_overdue = 0;
     }
 
     // Itemized invoice breakdown
@@ -811,6 +792,339 @@ export async function verifyRazorpayPayment(req, res) {
     });
   } catch (err) {
     console.error('Razorpay verification error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+
+/**
+ * Assess late fine for a single student (Admin / Warden)
+ */
+export async function assessIndividualLateFine(req, res) {
+  try {
+    const { studentId } = req.params;
+    const { customFineAmount, customReason } = req.body;
+
+    const student = await get(`
+      SELECT s.*, u.name as student_name, u.email as student_email, u.id as user_id,
+             f.id as fee_id, f.pending_amount, f.late_fine, f.days_overdue, f.due_date, f.status as fee_status,
+             f.total_amount, f.paid_amount, f.semester
+      FROM students s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN fees f ON f.student_id = s.id
+      WHERE s.id = ?
+      ORDER BY f.semester DESC LIMIT 1
+    `, [studentId]);
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student record not found." });
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    let daysOverdue = 0;
+    let lateFine = 0;
+    if (student.due_date && student.due_date < today) {
+      const diffMs = new Date(today).getTime() - new Date(student.due_date).getTime();
+      daysOverdue = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      lateFine = daysOverdue * 100; // Strictly ₹100 per overdue day
+    }
+    if (customFineAmount) {
+      lateFine = parseFloat(customFineAmount);
+    }
+
+    const reason = customReason || `${daysOverdue} days overdue fee payment (@ ₹100/day)`;
+
+    if (student.fee_id) {
+      const basePending = (student.total_amount || 45000) - (student.paid_amount || 0);
+      const newPending = basePending + lateFine;
+      await run(`
+        UPDATE fees
+        SET late_fine = ?, days_overdue = ?, pending_amount = ?, status = "Overdue"
+        WHERE id = ?
+      `, [lateFine, daysOverdue, newPending, student.fee_id]);
+    }
+
+    // Insert fine record
+    await run(`
+      INSERT INTO fines (student_id, fee_id, type, amount, reason, status, days_overdue, issued_by_user_id, issued_date)
+      VALUES (?, ?, "Late Fee", ?, ?, "Unpaid", ?, ?, date("now"))
+    `, [student.id, student.fee_id || null, lateFine, reason, daysOverdue, req.user.id]);
+
+    await createNotification(
+      student.user_id,
+      "⚠️ Late Fine Levied",
+      `A late fine penalty of ₹${lateFine} has been assessed: ${reason}.`,
+      "fine",
+      "/student/fees"
+    );
+
+    res.json({
+      success: true,
+      message: `Late fine of ₹${lateFine} levied on ${student.student_name}.`,
+      fine: { amount: lateFine, reason }
+    });
+  } catch (err) {
+    console.error("Error in assessIndividualLateFine:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+
+/**
+ * AI Fee & Fine Defaulter Audit Engine
+ * Categorizes every student by Semester Fee vs Fines unpaid status
+ */
+export async function getAIDefaulterAnalysis(req, res) {
+  try {
+    const { semester, filter, search } = req.query;
+
+    let sql = `
+      SELECT s.id as student_id, s.roll_number, s.branch, s.year,
+             u.name as student_name, u.email as student_email, u.phone as student_phone, u.id as user_id,
+             COALESCE(f.semester, 6) as semester,
+             COALESCE(f.total_amount, 45000.0) as sem_fee_total,
+             COALESCE(f.paid_amount, 0.0) as sem_fee_paid,
+             COALESCE(f.pending_amount, 45000.0) as sem_fee_pending,
+             COALESCE(f.status, 'Pending') as sem_fee_status,
+             COALESCE(f.due_date, '2026-10-15') as due_date,
+             r.room_number, blk.name as block_name
+      FROM students s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN fees f ON f.student_id = s.id
+      LEFT JOIN room_allocations ra ON ra.student_id = s.id AND ra.status = 'active'
+      LEFT JOIN beds b ON b.id = ra.bed_id
+      LEFT JOIN rooms r ON r.id = b.room_id
+      LEFT JOIN blocks blk ON blk.id = r.block_id
+      WHERE 1=1
+    `;
+
+    const params = [];
+    if (semester && semester !== 'All') {
+      sql += ` AND f.semester = ?`;
+      params.push(semester);
+    }
+    if (search) {
+      sql += ` AND (u.name LIKE ? OR s.roll_number LIKE ? OR s.branch LIKE ?)`;
+      const term = `%${search}%`;
+      params.push(term, term, term);
+    }
+
+    const rawStudents = await all(sql, params);
+    const allUnpaidFines = await all(`SELECT * FROM fines WHERE status = 'Unpaid'`);
+
+    const finesByStudent = {};
+    for (const fine of allUnpaidFines) {
+      if (!finesByStudent[fine.student_id]) {
+        finesByStudent[fine.student_id] = [];
+      }
+      finesByStudent[fine.student_id].push(fine);
+    }
+
+    const students = [];
+    let totalUnpaidSemFee = 0;
+    let totalUnpaidFines = 0;
+    let bothDefaultersCount = 0;
+    let semFeeOnlyCount = 0;
+    let fineOnlyCount = 0;
+    let clearedCount = 0;
+
+    for (const s of rawStudents) {
+      const studentFines = finesByStudent[s.student_id] || [];
+      const finesPending = studentFines.reduce((sum, fn) => sum + Number(fn.amount), 0);
+      const semFeePending = Number(s.sem_fee_pending || 0);
+
+      const hasSemFeePending = semFeePending > 0;
+      const hasFinePending = finesPending > 0;
+
+      let classification = 'CLEARED';
+      if (hasSemFeePending && hasFinePending) {
+        classification = 'BOTH_DEFAULTER';
+        bothDefaultersCount++;
+      } else if (hasSemFeePending) {
+        classification = 'SEM_FEE_ONLY';
+        semFeeOnlyCount++;
+      } else if (hasFinePending) {
+        classification = 'FINE_ONLY';
+        fineOnlyCount++;
+      } else {
+        clearedCount++;
+      }
+
+      totalUnpaidSemFee += semFeePending;
+      totalUnpaidFines += finesPending;
+
+      let riskScore = 0;
+      let recommendedAction = 'No action required';
+
+      if (classification === 'BOTH_DEFAULTER') {
+        riskScore = 95;
+        recommendedAction = '🚨 Hold Gate Pass & Issue Urgent Defaulter Notice';
+      } else if (classification === 'SEM_FEE_ONLY') {
+        riskScore = 70;
+        recommendedAction = '🎓 Send Semester Fee Installment Reminder';
+      } else if (classification === 'FINE_ONLY') {
+        riskScore = 45;
+        recommendedAction = '⚠️ Send Fine Payment Alert (Mess/Curfew/Late Fee)';
+      } else {
+        riskScore = 0;
+        recommendedAction = '✅ Clear - Eligible for all campus privileges';
+      }
+
+      const item = {
+        student_id: s.student_id,
+        user_id: s.user_id,
+        student_name: s.student_name,
+        roll_number: s.roll_number,
+        branch: s.branch,
+        semester: s.semester,
+        block_name: s.block_name || 'Unassigned',
+        room_number: s.room_number || 'N/A',
+        student_email: s.student_email,
+        student_phone: s.student_phone,
+        
+        sem_fee_total: Number(s.sem_fee_total),
+        sem_fee_paid: Number(s.sem_fee_paid),
+        sem_fee_pending: semFeePending,
+        sem_fee_status: s.sem_fee_status,
+        due_date: s.due_date,
+
+        fines_pending: finesPending,
+        fines_count: studentFines.length,
+        fine_details: studentFines.map(f => ({
+          id: f.id,
+          type: f.type,
+          amount: Number(f.amount),
+          reason: f.reason,
+          issued_date: f.issued_date,
+          days_overdue: f.days_overdue || 0
+        })),
+
+        total_outstanding: semFeePending + finesPending,
+        ai_classification: classification,
+        ai_risk_score: riskScore,
+        ai_recommended_action: recommendedAction
+      };
+
+      if (!filter || filter === 'all') {
+        students.push(item);
+      } else if (filter === 'both' && classification === 'BOTH_DEFAULTER') {
+        students.push(item);
+      } else if (filter === 'sem_fee_only' && classification === 'SEM_FEE_ONLY') {
+        students.push(item);
+      } else if (filter === 'fine_only' && classification === 'FINE_ONLY') {
+        students.push(item);
+      } else if (filter === 'cleared' && classification === 'CLEARED') {
+        students.push(item);
+      }
+    }
+
+    const aiInsights = [
+      `Total outstanding campus demand is ₹${(totalUnpaidSemFee + totalUnpaidFines).toLocaleString()} (₹${totalUnpaidSemFee.toLocaleString()} base semester fees + ₹${totalUnpaidFines.toLocaleString()} unpaid fines).`,
+      `${bothDefaultersCount} student(s) owe BOTH semester fees & fines, posing critical financial risk.`,
+      `${semFeeOnlyCount} student(s) have unpaid Semester Fees only.`,
+      `${fineOnlyCount} student(s) have clear Semester Fees but pending Disciplinary/Mess/Late fines.`,
+      `${clearedCount} student(s) have zero outstanding dues and 100% clean financial record.`
+    ];
+
+    res.json({
+      success: true,
+      summary: {
+        totalStudents: rawStudents.length,
+        totalUnpaidDemand: totalUnpaidSemFee + totalUnpaidFines,
+        totalUnpaidSemFee,
+        totalUnpaidFines,
+        bothDefaultersCount,
+        semFeeOnlyCount,
+        fineOnlyCount,
+        clearedCount
+      },
+      aiInsights,
+      students
+    });
+  } catch (err) {
+    console.error('AI Defaulter Analysis Error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+/**
+ * Dispatch targeted AI alerts to specific defaulter categories
+ */
+export async function sendTargetedDefaulterAlert(req, res) {
+  try {
+    const { targetGroup } = req.body; // 'all' | 'both' | 'sem_fee_only' | 'fine_only'
+
+    const allStudents = await all(`
+      SELECT s.id as student_id, u.id as user_id, u.name as student_name, s.roll_number,
+             f.pending_amount as sem_fee_pending, f.semester
+      FROM students s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN fees f ON f.student_id = s.id
+    `);
+
+    const allFines = await all(`SELECT * FROM fines WHERE status = 'Unpaid'`);
+    const finesMap = {};
+    for (const fn of allFines) {
+      if (!finesMap[fn.student_id]) finesMap[fn.student_id] = [];
+      finesMap[fn.student_id].push(fn);
+    }
+
+    let alertCount = 0;
+
+    for (const s of allStudents) {
+      const semPending = Number(s.sem_fee_pending || 0);
+      const studentFines = finesMap[s.student_id] || [];
+      const finesPending = studentFines.reduce((sum, fn) => sum + Number(fn.amount), 0);
+
+      const hasSem = semPending > 0;
+      const hasFine = finesPending > 0;
+
+      let category = 'CLEARED';
+      if (hasSem && hasFine) category = 'BOTH_DEFAULTER';
+      else if (hasSem) category = 'SEM_FEE_ONLY';
+      else if (hasFine) category = 'FINE_ONLY';
+
+      let shouldAlert = false;
+      let title = '';
+      let message = '';
+
+      if (targetGroup === 'both' && category === 'BOTH_DEFAULTER') {
+        shouldAlert = true;
+        title = '🚨 CRITICAL NOTICE: Unpaid Semester Fee & Fines';
+        message = `Notice to ${s.student_name}: You have ₹${semPending.toLocaleString()} pending in Semester ${s.semester || 6} fees AND ₹${finesPending.toLocaleString()} in unpaid fines. Pay now via student portal to avoid hall ticket & gate pass suspension.`;
+      } else if (targetGroup === 'sem_fee_only' && category === 'SEM_FEE_ONLY') {
+        shouldAlert = true;
+        title = '🎓 URGENT: Semester Fee Payment Due';
+        message = `Notice to ${s.student_name}: Your Semester ${s.semester || 6} base fee balance of ₹${semPending.toLocaleString()} is pending. Please settle on the student portal immediately.`;
+      } else if (targetGroup === 'fine_only' && category === 'FINE_ONLY') {
+        shouldAlert = true;
+        title = '⚠️ NOTICE: Unpaid Hostel Fine Penalty';
+        message = `Notice to ${s.student_name}: Your semester base fee is clear, but you have ${studentFines.length} pending fine(s) totaling ₹${finesPending.toLocaleString()}. Clear fines to maintain gate pass eligibility.`;
+      } else if (targetGroup === 'all' && category !== 'CLEARED') {
+        shouldAlert = true;
+        title = '💳 ACTION REQUIRED: Pending Hostel Dues Alert';
+        message = `Notice to ${s.student_name}: Total pending dues are ₹${(semPending + finesPending).toLocaleString()} (Sem Fee: ₹${semPending.toLocaleString()}, Fines: ₹${finesPending.toLocaleString()}). Pay now via Razorpay on student portal.`;
+      }
+
+      if (shouldAlert) {
+        await createNotification(
+          s.user_id,
+          title,
+          message,
+          'fee',
+          '/student/fees'
+        );
+        alertCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      count: alertCount,
+      message: `Targeted alerts successfully dispatched to ${alertCount} student(s) in category '${targetGroup}'!`
+    });
+  } catch (err) {
+    console.error('Targeted Alert Error:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 }

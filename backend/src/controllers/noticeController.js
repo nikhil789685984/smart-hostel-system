@@ -33,15 +33,15 @@ export async function getNotices(req, res) {
 
 export async function createNotice(req, res) {
   try {
-    const { title, description, category, priority, target_audience, expires_at } = req.body;
+    const { title, description, category, priority, target_audience, expires_at, attachment_url, attachment_type } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({ success: false, message: 'Title and description are required.' });
     }
 
     const result = await run(`
-      INSERT INTO notices (title, description, category, priority, published_by_user_id, target_audience, date, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE, ?)
+      INSERT INTO notices (title, description, category, priority, published_by_user_id, target_audience, date, expires_at, attachment_url, attachment_type)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE, ?, ?, ?)
     `, [
       title,
       description,
@@ -49,7 +49,9 @@ export async function createNotice(req, res) {
       priority || 'Normal',
       req.user.id,
       target_audience || 'all',
-      expires_at || null
+      expires_at || null,
+      attachment_url || null,
+      attachment_type || null
     ]);
 
     // Dispatch broadcast notifications to targeted audience
@@ -63,7 +65,7 @@ export async function createNotice(req, res) {
         `📢 Campus Notice: ${title}`,
         `${description.length > 120 ? description.slice(0, 117) + '...' : description} [Priority: ${priority || 'Normal'}]`,
         priority === 'Urgent' ? 'warning' : 'notice',
-        '/student/dashboard',
+        '/student/notices',
         req.user.id
       );
     } catch (nErr) {
@@ -79,13 +81,13 @@ export async function createNotice(req, res) {
 export async function updateNotice(req, res) {
   try {
     const { id } = req.params;
-    const { title, description, category, priority, target_audience, expires_at } = req.body;
+    const { title, description, category, priority, target_audience, expires_at, attachment_url, attachment_type } = req.body;
 
     await run(`
       UPDATE notices
-      SET title = ?, description = ?, category = ?, priority = ?, target_audience = ?, expires_at = ?
+      SET title = ?, description = ?, category = ?, priority = ?, target_audience = ?, expires_at = ?, attachment_url = COALESCE(?, attachment_url), attachment_type = COALESCE(?, attachment_type)
       WHERE id = ?
-    `, [title, description, category, priority, target_audience, expires_at || null, id]);
+    `, [title, description, category, priority, target_audience, expires_at || null, attachment_url || null, attachment_type || null, id]);
 
     try {
       await createBroadcastNotification(
@@ -93,7 +95,7 @@ export async function updateNotice(req, res) {
         `📢 Notice Updated: ${title}`,
         `Campus circular "${title}" has been revised by ${req.user.name}.`,
         'notice',
-        '/student/dashboard',
+        '/student/notices',
         req.user.id
       );
     } catch (e) {}

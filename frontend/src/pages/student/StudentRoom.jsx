@@ -275,9 +275,13 @@ export default function StudentRoom() {
               onChange={(e) => setFormData({ ...formData, preferred_room_type: e.target.value })}
               className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-600 bg-white"
             >
-              <option value="AC">AC (Double Sharing)</option>
-              <option value="Non-AC">Non-AC (Triple Sharing)</option>
-              <option value="Deluxe">Deluxe Corner Suite</option>
+              <option value="AC Single">AC - Single Occupancy</option>
+              <option value="Non-AC Single">Non-AC - Single Occupancy</option>
+              <option value="AC Double">AC - Double Sharing</option>
+              <option value="Non-AC Double">Non-AC - Double Sharing</option>
+              <option value="AC Triple">AC - Triple Sharing</option>
+              <option value="Non-AC Triple">Non-AC - Triple Sharing</option>
+              <option value="Deluxe Studio">Deluxe Studio (Private Washroom)</option>
             </select>
           </div>
 

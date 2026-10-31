@@ -52,6 +52,11 @@ export default function StudentMess() {
   const [absenceReason, setAbsenceReason] = useState('Personal / Dining Out');
   const [togglingMeal, setTogglingMeal] = useState(null);
 
+  const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
+  const [absenceStep, setAbsenceStep] = useState(1);
+  const [selectedMealType, setSelectedMealType] = useState(null);
+  const [absenceAgreement, setAbsenceAgreement] = useState(false);
+
   const fetchMessData = async () => {
     try {
       const [todayRes, weeklyRes, analyticsRes, absencesRes] = await Promise.all([
@@ -75,19 +80,32 @@ export default function StudentMess() {
     }
   };
 
-  const handleToggleAbsence = async (mealType) => {
+  const initiateAbsence = (mealType, isAbsent, dateToCancel = absenceDate) => {
+    if (isAbsent) {
+      // Direct cancel
+      handleToggleAbsence(mealType, dateToCancel, 'Cancellation');
+    } else {
+      setSelectedMealType(mealType);
+      setAbsenceStep(1);
+      setAbsenceAgreement(false);
+      setAbsenceModalOpen(true);
+    }
+  };
+
+  const handleToggleAbsence = async (mealType, dateStr = absenceDate, reasonStr = absenceReason) => {
     setTogglingMeal(mealType);
     try {
       const res = await api.toggleMealAbsence({
         meal_type: mealType,
-        date: absenceDate,
-        reason: absenceReason,
+        date: dateStr,
+        reason: reasonStr,
       });
       setFeedbackMsg(res.message);
       // Refresh absences list
       const updated = await api.getMyMealAbsences();
       setMyAbsences(updated.absences || []);
       setTotalRebate(updated.totalRebate || 0);
+      setAbsenceModalOpen(false);
       setTimeout(() => setFeedbackMsg(null), 5000);
     } catch (err) {
       alert(err.message || 'Error updating meal absence');
@@ -412,37 +430,7 @@ export default function StudentMess() {
           </div>
         </div>
 
-        {/* Date and Reason Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-300 mb-1.5">
-              Select Meal Date
-            </label>
-            <input
-              type="date"
-              value={absenceDate}
-              onChange={(e) => setAbsenceDate(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 text-white border border-white/20 font-bold focus:border-emerald-400 focus:outline-none"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-300 mb-1.5">
-              Absence Reason (Recorded for Warden Headcount)
-            </label>
-            <select
-              value={absenceReason}
-              onChange={(e) => setAbsenceReason(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl bg-slate-900/90 text-white border border-white/20 font-bold focus:border-emerald-400 focus:outline-none"
-            >
-              <option>Personal / Dining Out with Friends</option>
-              <option>Traveling Home / Approved Gate Pass Leave</option>
-              <option>Academic Lab / Late Night Hackathon</option>
-              <option>Religious Fasting / Personal Observance</option>
-              <option>Medical Health Rest / Infirmary Diet</option>
-            </select>
-          </div>
-        </div>
+        {/* Removed Date and Reason Controls - Moved to Verification Modal */}
 
         {/* 3 Meals Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -516,7 +504,7 @@ export default function StudentMess() {
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={() => handleToggleAbsence(item.meal)}
+                  onClick={() => initiateAbsence(item.meal, isAbsent)}
                   className={`w-full py-2.5 px-4 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
                     isPending
                       ? 'opacity-50 cursor-wait bg-slate-700 text-white'
@@ -577,10 +565,7 @@ export default function StudentMess() {
                       <td className="py-2 px-3 text-right">
                         <button
                           type="button"
-                          onClick={() => {
-                            setAbsenceDate(a.date);
-                            handleToggleAbsence(a.meal_type);
-                          }}
+                          onClick={() => initiateAbsence(a.meal_type, true, a.date)}
                           className="text-[10px] font-bold text-rose-400 hover:text-rose-300 underline"
                         >
                           Cancel
@@ -727,6 +712,139 @@ export default function StudentMess() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Multi-Step Meal Absence Verification Modal */}
+      <Modal
+        isOpen={absenceModalOpen}
+        onClose={() => setAbsenceModalOpen(false)}
+        title="Meal Absence Verification"
+        subtitle={`Opting out of ${selectedMealType}`}
+      >
+        <div className="space-y-5">
+          {absenceStep === 1 && (
+            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl flex items-start gap-3">
+                <Calendar className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-blue-900">Step 1: Select Date</h4>
+                  <p className="text-[10px] text-blue-700 mt-1">Please confirm the date you will be absent for this meal.</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Date of Absence</label>
+                <input
+                  type="date"
+                  value={absenceDate}
+                  onChange={(e) => setAbsenceDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAbsenceStep(2)}
+                  className="px-5 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+                >
+                  Next Step &rarr;
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {absenceStep === 2 && (
+            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-3">
+                <MessageSquare className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-amber-900">Step 2: Provide Reason</h4>
+                  <p className="text-[10px] text-amber-700 mt-1">Warden tracking requires a valid reason for missing hostel meals.</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Absence Reason</label>
+                <select
+                  value={absenceReason}
+                  onChange={(e) => setAbsenceReason(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:border-amber-500 focus:outline-none"
+                >
+                  <option>Personal / Dining Out with Friends</option>
+                  <option>Traveling Home / Approved Gate Pass Leave</option>
+                  <option>Academic Lab / Late Night Hackathon</option>
+                  <option>Religious Fasting / Personal Observance</option>
+                  <option>Medical Health Rest / Infirmary Diet</option>
+                </select>
+              </div>
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAbsenceStep(1)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                >
+                  &larr; Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAbsenceStep(3)}
+                  className="px-5 py-2 text-xs font-bold bg-amber-500 text-white rounded-xl hover:bg-amber-600"
+                >
+                  Proceed to Final Verification &rarr;
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {absenceStep === 3 && (
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-center">
+                <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                <h4 className="text-sm font-black text-emerald-900">Final Verification</h4>
+                <p className="text-xs text-emerald-700 mt-1">
+                  You are marking an absence for <strong>{selectedMealType}</strong> on <strong>{absenceDate}</strong>.
+                </p>
+                <div className="mt-3 inline-block bg-white px-3 py-1.5 rounded-lg border border-emerald-200 text-xs font-bold text-emerald-800">
+                  Estimated Rebate: +₹65
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50">
+                <input 
+                  type="checkbox" 
+                  checked={absenceAgreement}
+                  onChange={(e) => setAbsenceAgreement(e.target.checked)}
+                  className="mt-0.5" 
+                />
+                <span className="text-xs text-slate-600">
+                  I confirm that I will not be consuming the hostel {selectedMealType?.toLowerCase()} on this date. 
+                  I understand that false claims may lead to disciplinary fines.
+                </span>
+              </label>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAbsenceStep(2)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                >
+                  &larr; Back
+                </button>
+                <button
+                  type="button"
+                  disabled={!absenceAgreement || togglingMeal}
+                  onClick={() => handleToggleAbsence(selectedMealType)}
+                  className={`px-5 py-2 text-xs font-black text-white rounded-xl shadow-md transition ${
+                    absenceAgreement && !togglingMeal
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/25'
+                      : 'bg-slate-300 cursor-not-allowed'
+                  }`}
+                >
+                  {togglingMeal ? 'Processing...' : 'Confirm & Claim Rebate'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </div>
       </Modal>
 
     </motion.div>

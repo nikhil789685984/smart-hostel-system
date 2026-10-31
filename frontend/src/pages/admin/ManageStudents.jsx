@@ -15,6 +15,7 @@ import {
   Phone,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Filter,
   Check,
   Building,
@@ -22,6 +23,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Zap,
+  X,
   Scale,
   RefreshCw,
   FileText,
@@ -52,6 +54,7 @@ export default function ManageStudents() {
   const [masterTab, setMasterTab] = useState('personal'); // 'personal' | 'parents' | 'address' | 'academic'
   const [editingStudent, setEditingStudent] = useState(null);
   const [updatingStudent, setUpdatingStudent] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState(null);
 
   // Fines & Penalties State
   const [finesModalOpen, setFinesModalOpen] = useState(false);
@@ -65,8 +68,123 @@ export default function ManageStudents() {
     student_id: '',
     type: 'Curfew Violation',
     amount: '250',
-    reason: ''
+    reason: '',
+    customReason: ''
   });
+  const [studentSearchForFine, setStudentSearchForFine] = useState('');
+  const [showStudentDropdownFine, setShowStudentDropdownFine] = useState(false);
+  const [removeModal, setRemoveModal] = useState({ isOpen: false, step: 1, student: null, typedName: '', c2: false, c3: false, c4: false, submitting: false });
+
+  // 3-Step Confirmation Late Fine Modal State
+  const [lateFineModal, setLateFineModal] = useState({
+    isOpen: false,
+    step: 1, // 1 | 2 | 3
+    student: null, // null for bulk, student object for individual
+    customAmount: '',
+    customReason: '',
+    confirmedStep2: false,
+    submitting: false
+  });
+
+  const openLateFineModal = (studentObj = null) => {
+    setLateFineModal({
+      isOpen: true,
+      step: 1,
+      student: studentObj,
+      customAmount: '',
+      customReason: '',
+      confirmedStep2: false,
+      submitting: false
+    });
+  };
+
+  const closeLateFineModal = () => {
+    setLateFineModal((prev) => ({ ...prev, isOpen: false, step: 1, confirmedStep2: false }));
+  };
+
+  const executeRemoveStudent = async () => {
+    if(removeModal.typedName !== removeModal.student.name) return alert("Name mismatch");
+    setRemoveModal(prev => ({...prev, submitting: true}));
+    try {
+      await api.removeStudent(removeModal.student.id);
+      alert("Student permanently removed from the system.");
+      setRemoveModal({ isOpen: false, step: 1, student: null, typedName: '', c2: false, c3: false, c4: false, submitting: false });
+      fetchData();
+    } catch(err) {
+      alert(err.message);
+      setRemoveModal(prev => ({...prev, submitting: false}));
+    }
+  };
+
+  const handleExecuteLateFineLevy = async () => {
+    setLateFineModal((prev) => ({ ...prev, submitting: true }));
+    try {
+      if (lateFineModal.student) {
+        const res = await api.assessIndividualLateFine(lateFineModal.student.id, {
+          customFineAmount: lateFineModal.customAmount,
+          customReason: lateFineModal.customReason
+        });
+        setMsg(`⚡ ${res.message || 'Late fine levied directly on fee balance.'}`);
+      } else {
+        const res = await api.assessLateFines();
+        setMsg(`⚡ Late Fee Assessment Completed: ${res.assessedCount || 0} overdue accounts penalised (Total ₹${res.totalFinesAssessed || 0}).`);
+      }
+      setTimeout(() => setMsg(null), 6000);
+      closeLateFineModal();
+      fetchStudents();
+      fetchFines();
+    } catch (err) {
+      alert(err.message || 'Failed to apply late fine.');
+      setLateFineModal((prev) => ({ ...prev, submitting: false }));
+    }
+  };
+
+  // 3-Step Confirmation Alert / Warning Modal State
+  const [alertWarningModal, setAlertWarningModal] = useState({
+    isOpen: false,
+    step: 1, // 1 | 2 | 3
+    student: null, // null for bulk broadcast, student object for individual
+    customMessage: '',
+    confirmedStep2: false,
+    submitting: false
+  });
+
+  const openAlertWarningModal = (studentObj = null) => {
+    setAlertWarningModal({
+      isOpen: true,
+      step: 1,
+      student: studentObj,
+      customMessage: '',
+      confirmedStep2: false,
+      submitting: false
+    });
+  };
+
+  const closeAlertWarningModal = () => {
+    setAlertWarningModal((prev) => ({ ...prev, isOpen: false, step: 1, confirmedStep2: false }));
+  };
+
+  const handleExecuteAlertWarningDispatch = async () => {
+    setAlertWarningModal((prev) => ({ ...prev, submitting: true }));
+    try {
+      if (alertWarningModal.student) {
+        const targetId = alertWarningModal.student.id || alertWarningModal.student.student_id;
+        const targetName = alertWarningModal.student.name || alertWarningModal.student.student_name;
+        const res = await api.sendFeeAlertToStudent(targetId, {
+          customMessage: alertWarningModal.customMessage
+        });
+        setMsg(`🚨 ${res.message || `Urgent payment warning alert dispatched to ${targetName}!`}`);
+      } else {
+        const res = await api.sendFeeAlertToDefaulters();
+        setMsg(`🚨 ${res.message || `Urgent payment warnings dispatched to ${res.count || 0} defaulters!`}`);
+      }
+      setTimeout(() => setMsg(null), 6000);
+      closeAlertWarningModal();
+    } catch (err) {
+      alert(err.message || 'Failed to dispatch warning alert.');
+      setAlertWarningModal((prev) => ({ ...prev, submitting: false }));
+    }
+  };
   
   const [formData, setFormData] = useState({
     name: '',
@@ -220,35 +338,12 @@ export default function ManageStudents() {
     }
   };
 
-  const handleSendFineAlert = async (studentId, studentName) => {
-    setSendingFineAlertId(studentId);
-    try {
-      const res = await api.sendFeeAlertToStudent(studentId);
-      if (res.success) {
-        setMsg(`Urgent payment alert dispatched to ${studentName}!`);
-        setTimeout(() => setMsg(null), 4000);
-      }
-    } catch (err) {
-      alert(err.message || 'Failed to dispatch alert');
-    } finally {
-      setSendingFineAlertId(null);
-    }
+  const handleSendFineAlert = (studentId, studentName) => {
+    openAlertWarningModal({ id: studentId, name: studentName });
   };
 
-  const handleAlertAllDefaulters = async () => {
-    if (!window.confirm('Broadcast urgent payment alert to all students with pending fees / late fines?')) return;
-    setAlertingAllFines(true);
-    try {
-      const res = await api.sendFeeAlertToDefaulters();
-      if (res.success) {
-        setMsg(res.message || `Alerts dispatched to ${res.count} students.`);
-        setTimeout(() => setMsg(null), 5000);
-      }
-    } catch (err) {
-      alert(err.message || 'Failed to broadcast alerts');
-    } finally {
-      setAlertingAllFines(false);
-    }
+  const handleAlertAllDefaulters = () => {
+    openAlertWarningModal(null);
   };
 
   const handleIssueFine = async (e) => {
@@ -337,46 +432,58 @@ export default function ManageStudents() {
           </p>
         </div>
 
-        <div className="relative z-10 flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            disabled={assessingFines}
-            onClick={handleAssessLateFines}
-            className="px-4 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 text-xs font-bold transition flex items-center gap-2 backdrop-blur-sm active:scale-95"
-            title="Scan all student accounts and levy late fee fines for overdue deadlines"
-          >
-            <Zap className={`w-4 h-4 text-amber-400 ${assessingFines ? 'animate-spin' : ''}`} />
-            <span>{assessingFines ? 'Assessing...' : 'Assess Late Fines'}</span>
-          </motion.button>
+        <div className="relative z-10 flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
+          {/* Financial & Penalty Controls Segmented Group */}
+          <div className="flex items-center bg-white/10 p-1 rounded-2xl border border-white/15 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={() => openLateFineModal(null)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-black text-xs transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+              title="Scan all student accounts and levy late fee fines with 3-step confirmation"
+            >
+              <Zap className="w-3.5 h-3.5 fill-white animate-pulse" />
+              <span>Assess Fines</span>
+            </button>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              fetchFines();
-              setFinesModalOpen(true);
-            }}
-            className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition flex items-center gap-2 backdrop-blur-sm active:scale-95"
-          >
-            <Scale className="w-4 h-4 text-rose-300" />
-            <span>Fines Ledger</span>
-          </motion.button>
+            <button
+              type="button"
+              onClick={() => openAlertWarningModal(null)}
+              className="px-3 py-2 text-amber-200 hover:text-white hover:bg-white/10 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Broadcast urgent fee clearance warning alerts to all defaulters with 3-step confirmation"
+            >
+              <BellRing className="w-3.5 h-3.5 text-amber-400" />
+              <span>Alert Defaulters</span>
+            </button>
 
+            <button
+              type="button"
+              onClick={() => {
+                fetchFines();
+                setFinesModalOpen(true);
+              }}
+              className="px-3 py-2 text-rose-200 hover:text-white hover:bg-white/10 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="View campus fines ledger and infractions history"
+            >
+              <Scale className="w-3.5 h-3.5 text-rose-300" />
+              <span>Ledger</span>
+            </button>
+          </div>
+
+          {/* Core Operations Controls */}
           <Link
             to="/warden/allocations"
-            className="px-4 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition flex items-center gap-2 shrink-0 active:scale-95"
+            className="px-3.5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md shadow-indigo-600/30 transition flex items-center gap-1.5 shrink-0 active:scale-95 border border-indigo-400/30"
           >
-            <Bed className="w-4 h-4" /> Room & Bed Allocator Matrix
+            <Bed className="w-3.5 h-3.5" /> Bed Matrix
           </Link>
 
           <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => setModalOpen(true)}
-            className="px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-lg shadow-rose-600/30 transition flex items-center gap-2 shrink-0 active:scale-95"
+            className="px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md shadow-rose-600/30 transition flex items-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[3]" /> Enrol Student
+            <Plus className="w-4 h-4 stroke-[3]" /> Enrol Resident
           </motion.button>
         </div>
       </div>
@@ -488,14 +595,15 @@ export default function ManageStudents() {
             <p className="font-bold text-slate-700 text-sm">No student residents matching filter</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
+          <div className="overflow-x-auto pb-56 min-h-[50vh]">
+            <table className="w-full text-left text-xs min-w-[900px]">
               <thead className="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
                 <tr>
                   <th className="py-3.5 px-6">Student Resident</th>
                   <th className="py-3.5 px-6">Roll Number</th>
                   <th className="py-3.5 px-6">Academic Program</th>
                   <th className="py-3.5 px-6">Room Allotment</th>
+                  <th className="py-3.5 px-6">Care Taker / Warden</th>
                   <th className="py-3.5 px-6">Hostel Status</th>
                   <th className="py-3.5 px-6">Fee Status</th>
                   <th className="py-3.5 px-6 text-right">Actions</th>
@@ -548,6 +656,14 @@ export default function ManageStudents() {
                       )}
                     </td>
                     <td className="py-3.5 px-6">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-100 inline-flex items-center gap-1 text-[11px]">
+                          <span>🛡️</span> {s.caretaker_name || 'Staff Not Assigned'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block mt-0.5 truncate max-w-[160px]">{s.caretaker_dept || 'Hostel Caretaker'} {s.caretaker_staff_id ? `(${s.caretaker_staff_id})` : ''}</span>
+                    </td>
+                    <td className="py-3.5 px-6">
                       <span
                         className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
                           s.status === 'Checked Out'
@@ -583,6 +699,7 @@ export default function ManageStudents() {
                     </td>
                     <td className="py-3.5 px-6 text-right">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                        {/* Primary View Action 1 */}
                         <button
                           type="button"
                           onClick={() => setSelectedStudentMasterRecord(s)}
@@ -592,15 +709,7 @@ export default function ManageStudents() {
                           <span>👁️</span> Master Dossier
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => setEditingStudent({ ...s })}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-black transition flex items-center gap-1 shrink-0 cursor-pointer"
-                          title="Edit Student Information & Parent Contact Details"
-                        >
-                          <span>✏️</span> Edit
-                        </button>
-
+                        {/* Primary View Action 2 */}
                         <button
                           type="button"
                           onClick={() => setSelectedStudentForId(s)}
@@ -609,41 +718,131 @@ export default function ManageStudents() {
                         >
                           <span>🪪</span> ID Pass
                         </button>
-                        {s.status !== 'Checked Out' ? (
-
-                          <button
-                            type="button"
-                            disabled={checkingOutId === s.id}
-                            onClick={() => handleCheckout(s.id, s.name, s.room_number)}
-                            className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-black transition flex items-center gap-1 shrink-0 disabled:opacity-50 cursor-pointer"
-                            title="Checkout Student from Hostel & Vacate Bed"
-                          >
-                            {checkingOutId === s.id ? (
-                              <span className="w-3 h-3 border-2 border-rose-600/30 border-t-rose-600 rounded-full animate-spin" />
-                            ) : (
-                              <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                            )}
-                            <span>Hostel Checkout</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleReactivate(s.id, s.name)}
-                            className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-black transition flex items-center gap-1 shrink-0 cursor-pointer"
-                            title="Re-activate Resident Status"
-                          >
-                            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Re-Activate</span>
-                          </button>
-                        )}
-
+                        
                         <button
-                          onClick={() => handleDelete(s.id, s.name)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition ml-1"
-                          title="Remove Student Profile"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRemoveModal({ isOpen: true, step: 1, student: s, typedName: '', c2: false, c3: false, c4: false, submitting: false });
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-black transition flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                          title="Permanently Remove Student"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" /> Remove
                         </button>
+
+                        {/* Streamlined Dropdown Menu for Financial, Alert & Admin Actions */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setActiveMenuId(activeMenuId === s.id ? null : s.id)}
+                            className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black transition flex items-center gap-1.5 border shadow-2xs cursor-pointer ${
+                              activeMenuId === s.id
+                                ? 'bg-rose-600 text-white border-rose-600 shadow-md'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                            }`}
+                            title="Open Resident Management & Financial Control Actions"
+                          >
+                            <span>⚡ Actions</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${activeMenuId === s.id ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {activeMenuId === s.id && (
+                            <>
+                              {/* Backdrop overlay to close dropdown on click outside */}
+                              <div className="fixed inset-0 z-20" onClick={() => setActiveMenuId(null)} />
+
+                              {/* Floating Dropdown Card */}
+                              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1 text-left">
+                                <div className="px-2.5 py-1 text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                                  Financial & Penalisation (3-Step)
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    openLateFineModal(s);
+                                  }}
+                                  className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-amber-50 text-amber-900 text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Zap className="w-4 h-4 text-amber-600 fill-amber-500 shrink-0" />
+                                  <span>⚡ Levy Late Fine (3-Step)</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    openAlertWarningModal(s);
+                                  }}
+                                  className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-rose-50 text-rose-900 text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Bell className="w-4 h-4 text-rose-600 shrink-0" />
+                                  <span>🚨 Send Warning (3-Step)</span>
+                                </button>
+
+                                <div className="my-1 border-t border-slate-100" />
+                                <div className="px-2.5 py-1 text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                                  Resident Management
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    setEditingStudent({ ...s });
+                                  }}
+                                  className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-slate-100 text-slate-800 text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                                >
+                                  <span className="text-sm">✏️</span>
+                                  <span>Edit Resident Record</span>
+                                </button>
+
+                                {s.status !== 'Checked Out' ? (
+                                  <button
+                                    type="button"
+                                    disabled={checkingOutId === s.id}
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      handleCheckout(s.id, s.name, s.room_number);
+                                    }}
+                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-rose-50 text-rose-700 text-xs font-bold transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
+                                    <span>Hostel Checkout / Vacate</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      handleReactivate(s.id, s.name);
+                                    }}
+                                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-emerald-700 text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    <span>Re-Activate Resident</span>
+                                  </button>
+                                )}
+
+                                <div className="my-1 border-t border-slate-100" />
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    handleDelete(s.id, s.name);
+                                  }}
+                                  className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-red-50 text-red-600 text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+                                  <span>Remove Student Record</span>
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -840,7 +1039,7 @@ export default function ManageStudents() {
         onClose={() => setFinesModalOpen(false)}
         title="Campus Disciplinary Fines & Overdue Penalties Ledger"
         subtitle="Review late fee assessments, waive penalties, or issue disciplinary citations"
-        maxWidth="max-w-4xl"
+        maxWidth="max-w-6xl"
       >
         <div className="space-y-6">
           
@@ -910,7 +1109,7 @@ export default function ManageStudents() {
           </div>
 
           {/* Fines Table */}
-          <div className="max-h-[300px] overflow-y-auto border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="max-h-[450px] overflow-auto border border-slate-200 rounded-2xl custom-scrollbar">
             {finesLoading ? (
               <div className="p-8 text-center text-xs text-slate-400">
                 <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -921,7 +1120,7 @@ export default function ManageStudents() {
                 No fines or infractions recorded on campus.
               </div>
             ) : (
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[900px]">
                 <thead className="bg-slate-50 text-slate-400 uppercase font-bold tracking-wider border-b border-slate-200 sticky top-0">
                   <tr>
                     <th className="py-2.5 px-4">Student</th>
@@ -1017,21 +1216,39 @@ export default function ManageStudents() {
               Levy New Disciplinary Citation to Resident
             </h4>
             <form onSubmit={handleIssueFine} className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Student</label>
-                <select
-                  value={newFineData.student_id}
-                  onChange={(e) => setNewFineData({ ...newFineData, student_id: e.target.value })}
-                  className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
-                  required
-                >
-                  <option value="">Select Student...</option>
-                  {students.slice(0, 50).map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.roll_number})
-                    </option>
-                  ))}
-                </select>
+              <div className="relative">
+                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Search Student</label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search name or roll no..."
+                    value={studentSearchForFine}
+                    onFocus={() => setShowStudentDropdownFine(true)}
+                    onChange={(e) => {
+                      setStudentSearchForFine(e.target.value);
+                      setShowStudentDropdownFine(true);
+                      if(newFineData.student_id) setNewFineData({ ...newFineData, student_id: '' });
+                    }}
+                    className="w-full pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
+                    required={!newFineData.student_id}
+                  />
+                  {newFineData.student_id && (
+                    <button type="button" onClick={() => { setNewFineData({ ...newFineData, student_id: '' }); setStudentSearchForFine(''); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {showStudentDropdownFine && !newFineData.student_id && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                    {students.filter(s => s.name.toLowerCase().includes(studentSearchForFine.toLowerCase()) || s.roll_number.toLowerCase().includes(studentSearchForFine.toLowerCase())).map(s => (
+                      <div key={s.id} onClick={() => { setNewFineData({ ...newFineData, student_id: s.id }); setStudentSearchForFine(`${s.name} (${s.roll_number})`); setShowStudentDropdownFine(false); }} className="px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 text-xs">
+                        <p className="font-bold text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-500">{s.roll_number} • Room {s.room_number}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1046,6 +1263,7 @@ export default function ManageStudents() {
                   <option value="Noise Violation">Noise Violation</option>
                   <option value="Unauthorized Appliance">Unauthorized Appliance</option>
                   <option value="Disciplinary">General Disciplinary</option>
+                  <option value="Custom Reason">Custom Reason...</option>
                 </select>
               </div>
 
@@ -1066,7 +1284,7 @@ export default function ManageStudents() {
                 <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Reason / Citation</label>
                 <input
                   type="text"
-                  placeholder="e.g. Late turnstile return 23:15"
+                  placeholder={newFineData.type === 'Custom Reason' ? "Type custom reason here..." : "e.g. Details of violation"}
                   value={newFineData.reason}
                   onChange={(e) => setNewFineData({ ...newFineData, reason: e.target.value })}
                   className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
@@ -1493,6 +1711,425 @@ export default function ManageStudents() {
         )}
       </Modal>
 
+      {/* 3-STEP LATE FINE CONFIRMATION MODAL */}
+      <Modal
+        isOpen={lateFineModal.isOpen}
+        onClose={closeLateFineModal}
+        title={
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-700">
+              <Zap className="w-4 h-4 fill-rose-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900">
+                {lateFineModal.student
+                  ? `Direct Late Fine Levy • ${lateFineModal.student.name}`
+                  : 'Campus-Wide Automatic Late Fine Assessment'}
+              </h3>
+              <p className="text-[11px] font-bold text-rose-600">
+                Step {lateFineModal.step} of 3 Confirmation Safeguard
+              </p>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-1">
+          {/* Progress Indicator */}
+          <div className="flex items-center justify-between gap-2 bg-slate-100 p-1.5 rounded-2xl text-[11px] font-black">
+            <div className={`flex-1 text-center py-1.5 rounded-xl transition ${lateFineModal.step === 1 ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500'}`}>
+              1. Calculation & Target
+            </div>
+            <div className={`flex-1 text-center py-1.5 rounded-xl transition ${lateFineModal.step === 2 ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500'}`}>
+              2. Risk & Impact
+            </div>
+            <div className={`flex-1 text-center py-1.5 rounded-xl transition ${lateFineModal.step === 3 ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500'}`}>
+              3. Final Authorization
+            </div>
+          </div>
+
+          {/* STEP 1: Breakdown & Target Info */}
+          {lateFineModal.step === 1 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
+                <div className="flex items-center gap-2 text-amber-900 font-black text-sm">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>Step 1/3: Confirm Target & Fine Breakdown</span>
+                </div>
+                <p className="text-amber-800 leading-relaxed font-medium">
+                  You are preparing to levy an automatic late fee penalty. This fine will be added <strong>DIRECTLY to the student's total unpaid fee balance</strong>.
+                </p>
+              </div>
+
+              {lateFineModal.student ? (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold text-xs">Target Resident:</span>
+                    <span className="font-black text-slate-900">{lateFineModal.student.name} ({lateFineModal.student.roll_number})</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold text-xs">Hostel & Room:</span>
+                    <span className="font-bold text-slate-800">{lateFineModal.student.block_name || 'Block B'} • Room {lateFineModal.student.room_number || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold text-xs">Current Fee Status:</span>
+                    <span className="font-black text-rose-700">{lateFineModal.student.fee_status || 'Pending'}</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                        Fine Amount (₹) <span className="text-slate-400 font-normal">(Default ₹100/day overdue or custom)</span>
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="Leave empty for auto ₹100/day rate"
+                        value={lateFineModal.customAmount}
+                        onChange={(e) => setLateFineModal((prev) => ({ ...prev, customAmount: e.target.value }))}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">Reason / Remarks</label>
+                      <input
+                        type="text"
+                        placeholder="Overdue semester fee deadline penalty"
+                        value={lateFineModal.customReason}
+                        onChange={(e) => setLateFineModal((prev) => ({ ...prev, customReason: e.target.value }))}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">Scope:</span>
+                    <span className="font-black text-slate-900">All Overdue Student Accounts Across Campus</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">Penalisation Rate:</span>
+                    <span className="font-black text-rose-600">₹100 Per Day Overdue</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    This will automatically scan all student fee records past due date and add corresponding daily late fines directly to their outstanding balances.
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeLateFineModal}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLateFineModal((prev) => ({ ...prev, step: 2 }))}
+                  className="px-5 py-2.5 text-xs font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Proceed to Step 2: Risk Analysis</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Risk & Impact Analysis */}
+          {lateFineModal.step === 2 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs space-y-3">
+                <div className="flex items-center gap-2 text-rose-950 font-black text-sm">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                  <span>Step 2/3: High Risk & Financial Ledger Warning</span>
+                </div>
+                <div className="space-y-1.5 text-rose-900 font-medium leading-relaxed">
+                  <p>• <strong>Direct Fee Balance Addition:</strong> The calculated fine will be immediately added to student's live fee account balance.</p>
+                  <p>• <strong>Automated Alerts:</strong> Real-time alerts will be dispatched to the student's portal app and parent email.</p>
+                  <p>• <strong>Irreversible Levy:</strong> This action alters financial records. Waiver requires manual administrative intervention.</p>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={lateFineModal.confirmedStep2}
+                  onChange={(e) => setLateFineModal((prev) => ({ ...prev, confirmedStep2: e.target.checked }))}
+                  className="w-4 h-4 mt-0.5 accent-rose-600 rounded cursor-pointer shrink-0"
+                />
+                <span className="font-bold text-slate-800 leading-snug">
+                  I confirm that I have verified the overdue fee records and accept official administrative authority to update student fee balances directly.
+                </span>
+              </label>
+
+              <div className="pt-2 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => setLateFineModal((prev) => ({ ...prev, step: 1 }))}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Back to Step 1</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!lateFineModal.confirmedStep2}
+                  onClick={() => setLateFineModal((prev) => ({ ...prev, step: 3 }))}
+                  className="px-5 py-2.5 text-xs font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <span>Proceed to Final Step 3</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Final Authorization & Execution */}
+          {lateFineModal.step === 3 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs space-y-2 text-center">
+                <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
+                <h4 className="font-black text-slate-900 text-sm">Final Verification Complete</h4>
+                <p className="text-emerald-800 font-medium">
+                  {lateFineModal.student
+                    ? `Ready to levy fine directly on ${lateFineModal.student.name}'s fee account.`
+                    : 'Ready to execute campus-wide automatic late fine assessment across all overdue accounts.'}
+                </p>
+              </div>
+
+              <div className="pt-2 flex justify-between items-center gap-3">
+                <button
+                  type="button"
+                  disabled={lateFineModal.submitting}
+                  onClick={() => setLateFineModal((prev) => ({ ...prev, step: 2 }))}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={lateFineModal.submitting}
+                  onClick={handleExecuteLateFineLevy}
+                  className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white text-xs font-black shadow-lg shadow-rose-600/30 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {lateFineModal.submitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Updating Database & Dispatched Alerts...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 fill-white" />
+                      <span>⚡ CONFIRM & LEVY FINE DIRECTLY TO STUDENT FEES NOW</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* 3-STEP ALERT & WARNING CONFIRMATION MODAL */}
+      <Modal
+        isOpen={alertWarningModal.isOpen}
+        onClose={closeAlertWarningModal}
+        title={
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+              <BellRing className="w-4 h-4 text-amber-600 animate-bounce" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-900">
+                {alertWarningModal.student
+                  ? `Payment Warning Dispatch • ${alertWarningModal.student.name || alertWarningModal.student.student_name}`
+                  : 'Broadcast Campus Fee Defaulter Warnings'}
+              </h3>
+              <p className="text-[11px] font-bold text-amber-600">
+                Step {alertWarningModal.step} of 3 Confirmation Safeguard
+              </p>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-1">
+          {/* Progress Bar */}
+          <div className="flex items-center justify-between gap-2 bg-slate-100 p-1.5 rounded-2xl text-[11px] font-black">
+            <div className={`flex-1 text-center py-1.5 rounded-xl transition ${alertWarningModal.step === 1 ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-500'}`}>
+              1. Alert Scope & Text
+            </div>
+            <div className={`flex-1 text-center py-1.5 rounded-xl transition ${alertWarningModal.step === 2 ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-500'}`}>
+              2. Warning Impact Risk
+            </div>
+            <div className={`flex-1 text-center py-1.5 rounded-xl transition ${alertWarningModal.step === 3 ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-500'}`}>
+              3. Final Authorization
+            </div>
+          </div>
+
+          {/* STEP 1: Message Customization & Scope */}
+          {alertWarningModal.step === 1 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
+                <div className="flex items-center gap-2 text-amber-900 font-black text-sm">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>Step 1/3: Alert Target & Custom Warning Message</span>
+                </div>
+                <p className="text-amber-800 leading-relaxed font-medium">
+                  Configure the warning notice that will be pushed to the student's mobile portal, notification center, and parent contact.
+                </p>
+              </div>
+
+              {alertWarningModal.student ? (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">Recipient Resident:</span>
+                    <span className="font-black text-slate-900">{alertWarningModal.student.name || alertWarningModal.student.student_name}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200">
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
+                      Custom Warning Notice Message (Optional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Leave blank for standard urgent fee & fine notice..."
+                      value={alertWarningModal.customMessage}
+                      onChange={(e) => setAlertWarningModal((prev) => ({ ...prev, customMessage: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 font-medium leading-relaxed"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">Broadcast Scope:</span>
+                    <span className="font-black text-rose-700">All Defaulters with Unpaid Fees or Active Overdue Fines</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    This will send real-time urgent fee clearance notifications to every student account across all hostels that has overdue dues past deadline.
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeAlertWarningModal}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlertWarningModal((prev) => ({ ...prev, step: 2 }))}
+                  className="px-5 py-2.5 text-xs font-black bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Proceed to Step 2: Risk Impact</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Risk & Impact Analysis */}
+          {alertWarningModal.step === 2 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs space-y-3">
+                <div className="flex items-center gap-2 text-amber-950 font-black text-sm">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>Step 2/3: Warning Notification Impact Acknowledgment</span>
+                </div>
+                <div className="space-y-1.5 text-amber-900 font-medium leading-relaxed">
+                  <p>• <strong>Instant Portal Push:</strong> Student's dashboard app will display a prominent warning banner demanding immediate fee settlement.</p>
+                  <p>• <strong>Parent Contact Log:</strong> Official notice timestamp will be logged on the student's central master profile.</p>
+                  <p>• <strong>Campus Turnstile Policy:</strong> Non-payment after warning may result in facility lock and gate pass restriction.</p>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={alertWarningModal.confirmedStep2}
+                  onChange={(e) => setAlertWarningModal((prev) => ({ ...prev, confirmedStep2: e.target.checked }))}
+                  className="w-4 h-4 mt-0.5 accent-amber-600 rounded cursor-pointer shrink-0"
+                />
+                <span className="font-bold text-slate-800 leading-snug">
+                  I confirm that I have reviewed the defaulters list and authorize sending an official urgent payment warning notice to the target student(s).
+                </span>
+              </label>
+
+              <div className="pt-2 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => setAlertWarningModal((prev) => ({ ...prev, step: 1 }))}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Back to Step 1</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!alertWarningModal.confirmedStep2}
+                  onClick={() => setAlertWarningModal((prev) => ({ ...prev, step: 3 }))}
+                  className="px-5 py-2.5 text-xs font-black bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-md transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <span>Proceed to Final Step 3</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Final Authorization & Dispatch */}
+          {alertWarningModal.step === 3 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs space-y-2 text-center">
+                <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
+                <h4 className="font-black text-slate-900 text-sm">Final Warning Authorization Confirmed</h4>
+                <p className="text-emerald-800 font-medium">
+                  {alertWarningModal.student
+                    ? `Ready to dispatch urgent warning alert to ${alertWarningModal.student.name || alertWarningModal.student.student_name}.`
+                    : 'Ready to broadcast urgent fee clearance warnings to all campus fee defaulters.'}
+                </p>
+              </div>
+
+              <div className="pt-2 flex justify-between items-center gap-3">
+                <button
+                  type="button"
+                  disabled={alertWarningModal.submitting}
+                  onClick={() => setAlertWarningModal((prev) => ({ ...prev, step: 2 }))}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={alertWarningModal.submitting}
+                  onClick={handleExecuteAlertWarningDispatch}
+                  className="flex-1 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white text-xs font-black shadow-lg shadow-amber-600/30 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {alertWarningModal.submitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Broadcasting Payment Alerts...</span>
+                    </>
+                  ) : (
+                    <>
+                      <BellRing className="w-4 h-4 text-white" />
+                      <span>🚨 CONFIRM & BROADCAST URGENT FEE ALERT / WARNING NOW</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
       {selectedStudentForId && (
         <DigitalIDCard
           student={selectedStudentForId}
@@ -1501,7 +2138,218 @@ export default function ManageStudents() {
         />
       )}
 
-    </motion.div>
+    
+      {/* 5-Step Verification Modal for Permanent Removal */}
+      <Modal isOpen={removeModal.isOpen} onClose={() => setRemoveModal({ isOpen: false, step: 1, student: null, typedName: '', c2: false, c3: false, c4: false, submitting: false })} title="PERMANENT EVICTION & ACCOUNT DELETION">
+        {removeModal.student && (
+          <div className="p-2 space-y-6">
+            
+            {/* Progress Tracker */}
+            <div className="flex items-center justify-between text-xs font-bold text-slate-400 border-b border-slate-100 pb-4">
+              <div className={`${removeModal.step >= 1 ? 'text-rose-600' : ''}`}>1. Target</div>
+              <div className={`${removeModal.step >= 2 ? 'text-rose-600' : ''}`}>2. Consent</div>
+              <div className={`${removeModal.step >= 3 ? 'text-rose-600' : ''}`}>3. Finance</div>
+              <div className={`${removeModal.step >= 4 ? 'text-rose-600' : ''}`}>4. Verify</div>
+              <div className={`${removeModal.step >= 5 ? 'text-rose-600' : ''}`}>5. Execute</div>
+            </div>
+
+            {removeModal.step === 1 && (
+              <div className="text-center space-y-4 py-4">
+                <AlertTriangle className="w-12 h-12 text-rose-600 mx-auto animate-pulse" />
+                <h3 className="text-xl font-black text-rose-700">DANGER ZONE</h3>
+                <p className="text-slate-600 text-sm">
+                  You are initiating the permanent removal process for:<br/>
+                  <span className="font-black text-slate-900 block mt-2 text-lg">{removeModal.student.name} ({removeModal.student.roll_number})</span>
+                </p>
+                <button onClick={() => setRemoveModal(p => ({...p, step: 2}))} className="mt-4 w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl shadow-lg transition">I understand, proceed to Step 2</button>
+              </div>
+            )}
+
+            {removeModal.step === 2 && (
+              <div className="space-y-4 py-4">
+                <h3 className="font-black text-slate-800 text-lg">Acknowledge Consequences</h3>
+                <ul className="text-sm text-slate-600 space-y-2 list-disc pl-5">
+                  <li>This action is <b>irreversible</b>.</li>
+                  <li>Student's hostel bed will be immediately marked as <b>Vacant</b>.</li>
+                  <li>All gate passes, mess QR codes, and login access will be <b>revoked</b>.</li>
+                </ul>
+                <label className="flex items-start gap-3 mt-4 p-3 bg-rose-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" checked={removeModal.c2} onChange={(e) => setRemoveModal(p => ({...p, c2: e.target.checked}))} className="mt-1" />
+                  <span className="text-xs font-bold text-rose-900">I acknowledge that this action cannot be undone and will revoke all access for {removeModal.student.name}.</span>
+                </label>
+                <div className="flex gap-3 pt-4">
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 1}))} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl">Back</button>
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 3}))} disabled={!removeModal.c2} className="flex-1 py-3 bg-rose-600 text-white disabled:opacity-50 font-bold rounded-xl transition">Proceed to Step 3</button>
+                </div>
+              </div>
+            )}
+
+            {removeModal.step === 3 && (
+              <div className="space-y-4 py-4">
+                <h3 className="font-black text-slate-800 text-lg">Financial Clearance Override</h3>
+                <p className="text-sm text-slate-600">Please confirm that all outstanding fees and fines have been settled, or that you have authorization to override financial locks.</p>
+                <label className="flex items-start gap-3 p-3 bg-rose-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" checked={removeModal.c3} onChange={(e) => setRemoveModal(p => ({...p, c3: e.target.checked}))} className="mt-1" />
+                  <span className="text-xs font-bold text-rose-900">I authorize the financial clearance override for this eviction.</span>
+                </label>
+                <div className="flex gap-3 pt-4">
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 2}))} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl">Back</button>
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 4}))} disabled={!removeModal.c3} className="flex-1 py-3 bg-rose-600 text-white disabled:opacity-50 font-bold rounded-xl transition">Proceed to Step 4</button>
+                </div>
+              </div>
+            )}
+
+            {removeModal.step === 4 && (
+              <div className="space-y-4 py-4">
+                <h3 className="font-black text-slate-800 text-lg">Warden/Admin Signature</h3>
+                <p className="text-sm text-slate-600">As the authorizing admin, you are taking full responsibility for this eviction.</p>
+                <label className="flex items-start gap-3 p-3 bg-rose-50 rounded-xl cursor-pointer">
+                  <input type="checkbox" checked={removeModal.c4} onChange={(e) => setRemoveModal(p => ({...p, c4: e.target.checked}))} className="mt-1" />
+                  <span className="text-xs font-bold text-rose-900">I digitally sign and authorize this permanent removal.</span>
+                </label>
+                <div className="flex gap-3 pt-4">
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 3}))} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl">Back</button>
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 5}))} disabled={!removeModal.c4} className="flex-1 py-3 bg-rose-600 text-white disabled:opacity-50 font-bold rounded-xl transition">Proceed to Final Step</button>
+                </div>
+              </div>
+            )}
+
+            {removeModal.step === 5 && (
+              <div className="space-y-4 py-4">
+                <h3 className="font-black text-rose-700 text-lg">Final Execution</h3>
+                <p className="text-sm text-slate-600">To prevent accidental deletion, please type the student's full name exactly as shown below:</p>
+                <div className="p-3 bg-slate-100 rounded-lg text-center font-mono font-black text-lg select-none">
+                  {removeModal.student.name}
+                </div>
+                <input 
+                  type="text"
+                  placeholder="Type name here..."
+                  value={removeModal.typedName}
+                  onChange={(e) => setRemoveModal(p => ({...p, typedName: e.target.value}))}
+                  className="w-full p-3 border-2 border-rose-200 rounded-xl font-bold text-center focus:border-rose-500 outline-none"
+                />
+                <div className="flex gap-3 pt-4">
+                  <button onClick={() => setRemoveModal(p => ({...p, step: 4}))} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl">Back</button>
+                  <button 
+                    onClick={executeRemoveStudent} 
+                    disabled={removeModal.typedName !== removeModal.student.name || removeModal.submitting}
+                    className="flex-1 py-3 bg-black text-white disabled:opacity-50 font-black rounded-xl transition flex justify-center items-center gap-2"
+                  >
+                    {removeModal.submitting ? 'TERMINATING...' : 'PERMANENTLY EVICT'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+          
+      {/* History Drawer */}
+      <AnimatePresence>
+        {selectedHistoryStudent && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedHistoryStudent(null)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100]"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-slate-50 shadow-2xl z-[101] flex flex-col border-l border-slate-200"
+            >
+              {/* Header */}
+              <div className="bg-white p-6 border-b border-slate-200 flex items-center justify-between shadow-sm z-10 relative">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-indigo-600" />
+                    Student History
+                  </h2>
+                  <p className="text-sm font-medium text-slate-500 mt-1">{selectedHistoryStudent.name} • {selectedHistoryStudent.roll_number}</p>
+                </div>
+                <button onClick={() => setSelectedHistoryStudent(null)} className="w-10 h-10 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-600 transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Timeline Content */}
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                {loadingHistory ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
+                    <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                    <p className="font-bold text-sm tracking-wide">Fetching complete history...</p>
+                  </div>
+                ) : historyData && historyData.length > 0 ? (
+                  <div className="relative border-l-2 border-slate-200/60 ml-4 space-y-8">
+                    {historyData.map((item, idx) => {
+                      let Icon = FileText;
+                      let colorClass = 'text-slate-500 bg-slate-100';
+                      let dotColor = 'border-slate-400';
+                      
+                      if (item.type === 'Gate Pass') { Icon = ArrowRight; colorClass = 'text-blue-600 bg-blue-100'; dotColor = 'border-blue-500'; }
+                      else if (item.type === 'Complaint') { Icon = AlertCircle; colorClass = 'text-red-600 bg-red-100'; dotColor = 'border-red-500'; }
+                      else if (item.type === 'Parcel') { Icon = Package; colorClass = 'text-purple-600 bg-purple-100'; dotColor = 'border-purple-500'; }
+                      else if (item.type === 'Room Request') { Icon = Building; colorClass = 'text-orange-600 bg-orange-100'; dotColor = 'border-orange-500'; }
+                      else if (item.type === 'Checkout') { Icon = CheckCircle2; colorClass = 'text-rose-600 bg-rose-100'; dotColor = 'border-rose-500'; }
+                      else if (item.type === 'Fine') { Icon = Activity; colorClass = 'text-red-600 bg-red-100'; dotColor = 'border-red-500'; }
+                      else if (item.type === 'Guest Pass') { Icon = Users; colorClass = 'text-teal-600 bg-teal-100'; dotColor = 'border-teal-500'; }
+                      else if (item.type === 'Payment' || item.type === 'Room Downgrade Refund') { Icon = CreditCard; colorClass = 'text-emerald-600 bg-emerald-100'; dotColor = 'border-emerald-500'; }
+                      else if (item.type === 'Fee Billing') { Icon = FileText; colorClass = 'text-blue-600 bg-blue-100'; dotColor = 'border-blue-500'; }
+                      else if (item.type === 'Canteen Order') { Icon = Zap; colorClass = 'text-amber-600 bg-amber-100'; dotColor = 'border-amber-500'; }
+
+                      return (
+                        <motion.div 
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          key={item.type + item.id} 
+                          className="relative pl-8 group"
+                        >
+                          <div className={`absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-4 border-slate-50 shadow-sm ${dotColor} bg-white group-hover:scale-125 transition-transform`}></div>
+                          
+                          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/60 hover:shadow-md hover:border-indigo-200 transition-all">
+                            <div className="flex justify-between items-start mb-2">
+                              <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${colorClass}`}>
+                                {item.type}
+                              </span>
+                              <span className="text-xs font-bold text-slate-400">
+                                {new Date(item.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-slate-800 leading-tight mb-1">
+                              {item.title}
+                            </h4>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                              Status: <span className={item.status === 'Approved' || item.status === 'Resolved' || item.status === 'Delivered' || item.status === 'Paid' ? 'text-emerald-600' : 'text-amber-500'}>{item.status}</span>
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-4">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
+                      <Clock className="w-8 h-8" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-bold text-slate-600">No History Found</p>
+                      <p className="text-xs mt-1">This student hasn't made any requests or complaints yet.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+</div>
+        )}
+      </Modal>
+</motion.div>
   );
 }
 

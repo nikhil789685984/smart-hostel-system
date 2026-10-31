@@ -23,7 +23,7 @@ export default function StudentAssistant() {
       sender: 'bot',
       text: `Hello ${user?.name || 'Resident'}! I am HostelGenie, your smart AI resident assistant. I'm connected to the campus database and have real-time information about your room, today's dining schedule, pending maintenance tickets, and campus regulations. How can I assist you today?`,
       time: 'Just now',
-      source: 'grounded-engine'
+      source: 'gemini-ai'
     }
   ]);
   const [input, setInput] = useState('');
@@ -86,23 +86,30 @@ export default function StudentAssistant() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-black text-slate-900">HostelGenie AI Assistant</h1>
-            <span className="px-3 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/10 text-indigo-800 border border-indigo-200/80 flex items-center gap-1 shadow-xs">
-              <Sparkles className="w-3 h-3 text-amber-500 animate-spin" /> Grounded In Database
-            </span>
+      {/* Premium Header */}
+      <div className="flex flex-col items-center text-center space-y-3 mb-6 relative z-10">
+        <div className="relative">
+          <div className="absolute inset-0 blur-2xl opacity-40 bg-gradient-to-r from-blue-400 via-purple-500 to-rose-400 animate-pulse rounded-full" />
+          <div className="w-16 h-16 rounded-full bg-white border border-white/40 shadow-xl flex items-center justify-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/80 to-purple-50/80" />
+            <Bot className="w-7 h-7 text-indigo-600 relative z-10" />
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Real-time conversational intelligence for mess food, complaints, room transfers, and curfew rules.
+        </div>
+        <div>
+          <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 tracking-tight">HostelGenie Intelligence</h1>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Database Connected
           </p>
         </div>
       </div>
 
       {/* Chat Container */}
-      <div className="glass-card rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden flex flex-col h-[70vh]">
+      
+      {/* Immersive Chat Container */}
+      <div className="relative rounded-[2rem] border border-white/60 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col h-[72vh] bg-white/70 backdrop-blur-2xl">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-400/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
         
         {/* Messages Stream */}
         <div className="flex-1 p-6 overflow-y-auto space-y-4">
@@ -118,20 +125,20 @@ export default function StudentAssistant() {
                   className={`flex items-start gap-3.5 ${isBot ? '' : 'flex-row-reverse'}`}
                 >
                   <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                    className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-lg ${
                       isBot
-                        ? 'bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-600 text-white shadow-blue-500/20'
-                        : 'bg-slate-900 text-white'
+                        ? 'bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white shadow-purple-500/30'
+                        : 'bg-slate-900 text-white shadow-slate-900/20'
                     }`}
                   >
                     {isBot ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
                   </div>
 
                   <div
-                    className={`max-w-[82%] rounded-3xl px-5 py-4 text-xs leading-relaxed shadow-sm ${
+                    className={`max-w-[85%] rounded-[1.5rem] px-5 py-4 text-[13px] leading-relaxed shadow-sm ${
                       isBot
-                        ? 'bg-white/95 border border-slate-200/90 text-slate-800'
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-blue-500/25'
+                        ? 'bg-white border border-slate-100 text-slate-700 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] rounded-tl-sm'
+                        : 'bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] rounded-tr-sm'
                     }`}
                   >
                     <p className="whitespace-pre-wrap font-medium">{msg.text}</p>
@@ -140,7 +147,7 @@ export default function StudentAssistant() {
                       <span>{msg.time}</span>
                       {msg.source && (
                         <span className="font-mono uppercase bg-slate-100/80 text-slate-500 px-2 py-0.5 rounded-full font-bold">
-                          {msg.source === 'gemini-ai' ? 'Gemini 1.5' : 'Verified DB'}
+                          {msg.source === 'gemini-ai' ? 'Gemini 3.8 Pro' : 'Verified DB'}
                         </span>
                       )}
                     </div>
@@ -159,13 +166,13 @@ export default function StudentAssistant() {
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-700 to-indigo-600 text-white flex items-center justify-center shrink-0 animate-pulse shadow-sm">
                 <Bot className="w-5 h-5" />
               </div>
-              <div className="bg-white border border-slate-200/90 rounded-3xl px-5 py-3.5 text-xs text-slate-500 flex items-center gap-2 shadow-xs">
-                <span className="flex gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce"></span>
-                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.2s]"></span>
-                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.4s]"></span>
+              <div className="bg-white/80 backdrop-blur-md border border-slate-200/50 rounded-2xl rounded-tl-sm px-5 py-3.5 text-xs text-slate-500 flex items-center gap-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
+                <span className="flex gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce [animation-delay:0.15s]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-bounce [animation-delay:0.3s]"></span>
                 </span>
-                <span className="font-semibold text-slate-600">HostelGenie is consulting live database...</span>
+                <span className="font-semibold text-slate-600">Generating intelligent response...</span>
               </div>
             </motion.div>
           )}
@@ -201,24 +208,26 @@ export default function StudentAssistant() {
             e.preventDefault();
             handleSend();
           }}
-          className="p-4 bg-white border-t border-slate-200/80 flex items-center gap-3"
+          className="p-4 bg-transparent border-t border-slate-200/40"
         >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about today's meal, complaint status, room transfer, gate curfew..."
-            className="flex-1 px-4 py-3 text-xs rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium"
-          />
-          <motion.button
-            type="submit"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            disabled={!input.trim() || loading}
-            className="p-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl shadow-lg shadow-blue-500/25 transition"
-          >
-            <Send className="w-4 h-4" />
-          </motion.button>
+          <div className="relative flex items-center max-w-3xl mx-auto bg-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-200 p-1.5 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all duration-300">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask anything about your hostel..."
+              className="flex-1 px-5 py-3 text-sm bg-transparent focus:outline-none text-slate-700 font-medium placeholder-slate-400"
+            />
+            <motion.button
+              type="submit"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              disabled={!input.trim() || loading}
+              className="p-3.5 bg-slate-900 hover:bg-indigo-600 disabled:opacity-50 text-white rounded-full shadow-md transition-colors mr-1"
+            >
+              <Send className="w-4 h-4 ml-0.5" />
+            </motion.button>
+          </div>
         </form>
 
       </div>
