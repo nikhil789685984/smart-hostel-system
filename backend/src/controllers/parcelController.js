@@ -54,11 +54,16 @@ export async function getAllParcels(req, res) {
   try {
     await initParcelDB();
     const parcels = await all(`
-      SELECT p.*, s.roll_number, u.name as student_name 
+      SELECT p.*, s.roll_number, u.name as student_name,
+             r.room_number, blk.name as block_name
       FROM parcels p
       JOIN students s ON p.student_id = s.id
       JOIN users u ON s.user_id = u.id
-      ORDER BY p.received_at DESC
+      LEFT JOIN room_allocations ra ON ra.student_id = s.id AND ra.status = 'active'
+      LEFT JOIN beds b ON b.id = ra.bed_id
+      LEFT JOIN rooms r ON r.id = b.room_id
+      LEFT JOIN blocks blk ON blk.id = r.block_id
+      ORDER BY COALESCE(p.collected_at, p.received_at) DESC
     `);
     res.json({ success: true, parcels });
   } catch (err) {
