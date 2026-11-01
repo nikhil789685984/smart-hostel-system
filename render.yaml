@@ -3,7 +3,7 @@ services:
     name: smart-hostel-system
     env: node
     plan: free
-    buildCommand: cd frontend && npm install && npm run build && cp -r dist/* ../backend/dist/ && cd ../backend && npm install
+    buildCommand: cd backend && npm install
     startCommand: cd backend && node src/server.js
     envVars:
       - key: DB_TYPE
