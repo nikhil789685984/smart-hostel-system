@@ -28,8 +28,8 @@ export default function StudentParcels() {
 
   if (loading) return <div className="p-10 text-center font-bold text-slate-500 animate-pulse">Checking Mailroom...</div>;
 
-  const pending = parcels.filter(p => p.status === 'Awaiting_Collection');
-  const collected = parcels.filter(p => p.status === 'Collected');
+  const pending = parcels.filter(p => p.status === 'Awaiting_Collection' || p.status === 'Pending');
+  const collected = parcels.filter(p => p.status === 'Collected' || p.status === 'Delivered');
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-10 font-sans">
@@ -157,7 +157,7 @@ export default function StudentParcels() {
                 </div>
                 <div className="text-right">
                   <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest rounded-md">Collected</span>
-                  <p className="text-[10px] font-bold text-slate-400 mt-1">{new Date(p.collected_at).toLocaleDateString()}</p>
+                  <p className="text-[10px] font-bold text-slate-400 mt-1">{new Date(p.collected_at || p.received_at).toLocaleDateString()}</p>
                 </div>
               </div>
             ))}

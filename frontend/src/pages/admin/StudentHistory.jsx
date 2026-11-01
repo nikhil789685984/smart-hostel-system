@@ -228,12 +228,31 @@ export default function StudentHistory() {
                           <h4 className="text-base font-bold text-slate-800 leading-tight mb-2 pr-4">
                             {item.title}
                           </h4>
+                          
+                          {item.type === 'Parcel' && item.tracking_number && (
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              {item.courier && (
+                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-black rounded-md border border-indigo-100">
+                                  {item.courier}
+                                </span>
+                              )}
+                              <span className="text-xs font-mono font-bold text-slate-500">
+                                #{item.tracking_number}
+                              </span>
+                              {item.collected_at && (
+                                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                  ✓ Handed Over: {new Date(item.collected_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Status:</span>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                              item.status === 'Approved' || item.status === 'Resolved' || item.status === 'Delivered' || item.status === 'Paid' 
-                                ? 'bg-emerald-100 text-emerald-700' 
-                                : 'bg-amber-100 text-amber-700'
+                            <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                              item.status === 'Approved' || item.status === 'Resolved' || item.status === 'Delivered' || item.status === 'Paid' || item.status === 'Collected'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
                             }`}>
                               {item.status}
                             </span>

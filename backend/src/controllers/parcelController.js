@@ -74,10 +74,10 @@ export async function getAllParcels(req, res) {
 export async function getMyParcels(req, res) {
   try {
     await initParcelDB();
-    const student = await get('SELECT id FROM students WHERE user_id = ?', [req.user.id]);
+    const student = await get('SELECT id, user_id FROM students WHERE user_id = ? OR id = ?', [req.user.id, req.user.id]);
     if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
 
-    const parcels = await all("SELECT * FROM parcels WHERE student_id = ? ORDER BY received_at DESC", [student.id]);
+    const parcels = await all("SELECT * FROM parcels WHERE student_id = ? OR student_id = ? ORDER BY COALESCE(collected_at, received_at) DESC", [student.id, student.user_id]);
     res.json({ success: true, parcels });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -91,13 +91,16 @@ export async function verifyAndCollectParcel(req, res) {
 
     const parcel = await get("SELECT * FROM parcels WHERE id = ?", [id]);
     if (!parcel) return res.status(404).json({ success: false, message: 'Parcel not found' });
-    if (parcel.status === 'Collected') return res.status(400).json({ success: false, message: 'Parcel already collected' });
+    if (parcel.status === 'Collected' || parcel.status === 'Delivered') {
+      return res.status(400).json({ success: false, message: 'Parcel already collected' });
+    }
 
-    if (parcel.otp !== otp.toString()) {
+    if (parcel.otp.toString().trim() !== otp.toString().trim()) {
       return res.status(400).json({ success: false, message: 'Invalid OTP. Verification failed.' });
     }
 
-    await run("UPDATE parcels SET status = 'Collected', collected_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+    const nowIso = new Date().toISOString();
+    await run("UPDATE parcels SET status = 'Collected', collected_at = ? WHERE id = ?", [nowIso, id]);
     res.json({ success: true, message: 'OTP Verified! Parcel successfully handed over.' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

@@ -795,33 +795,56 @@ export async function getStudentHistory(req, res) {
 
     let timeline = [];
     const sid = student.id;
+    const uid = student.user_id;
 
     // 1. Gate Passes
-    const gatePasses = await all(`SELECT id, pass_type || ' to ' || destination as title, status, created_at, 'Gate Pass' as type FROM gate_passes WHERE student_id = ?`, [sid]);
+    const gatePasses = await all(`SELECT id, pass_type || ' to ' || destination as title, status, created_at, 'Gate Pass' as type FROM gate_passes WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...gatePasses.map(i => ({ ...i, icon: 'gatepass', color: 'blue' })));
 
     // 2. Complaints
-    const complaints = await all(`SELECT id, title, status, created_at, 'Complaint' as type FROM complaints WHERE student_id = ?`, [sid]);
+    const complaints = await all(`SELECT id, title, status, created_at, 'Complaint' as type FROM complaints WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...complaints.map(i => ({ ...i, icon: 'complaint', color: 'red' })));
 
-    // 3. Parcels
-    const parcels = await all(`SELECT id, courier || ' Parcel' as title, status, received_at as created_at, 'Parcel' as type FROM parcels WHERE student_id = ?`, [sid]);
-    timeline.push(...parcels.map(i => ({ ...i, icon: 'parcel', color: 'purple' })));
+    // 3. Parcels (Awaiting pickup or collected)
+    const parcels = await all(`
+      SELECT id, courier, tracking_number, status, otp, received_at, collected_at
+      FROM parcels 
+      WHERE student_id = ? OR student_id = ?
+      ORDER BY COALESCE(collected_at, received_at) DESC
+    `, [sid, uid]);
+
+    for (const p of parcels) {
+      const isCollected = p.status === 'Collected' || p.status === 'Delivered';
+      const eventDate = isCollected && p.collected_at ? p.collected_at : p.received_at;
+      timeline.push({
+        id: `parcel-${p.id}`,
+        title: `${p.courier} Delivery Parcel ${p.tracking_number ? `(#${p.tracking_number})` : ''} — ${isCollected ? 'Collected & Handed Over' : 'Awaiting Collection at Gate'}`,
+        status: isCollected ? 'Collected' : 'Pending',
+        created_at: eventDate,
+        received_at: p.received_at,
+        collected_at: p.collected_at,
+        tracking_number: p.tracking_number,
+        courier: p.courier,
+        type: 'Parcel',
+        icon: 'parcel',
+        color: isCollected ? 'emerald' : 'purple'
+      });
+    }
 
     // 4. Room Change Requests
-    const roomChanges = await all(`SELECT id, 'Room Change: ' || preferred_room_type || ' (' || preferred_block || ')' as title, status, created_at, 'Room Request' as type FROM room_change_requests WHERE student_id = ?`, [sid]);
+    const roomChanges = await all(`SELECT id, 'Room Change: ' || preferred_room_type || ' (' || preferred_block || ')' as title, status, created_at, 'Room Request' as type FROM room_change_requests WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...roomChanges.map(i => ({ ...i, icon: 'room', color: 'orange' })));
 
     // 5. Checkout Requests
-    const checkouts = await all(`SELECT id, 'Hostel Checkout' as title, status, created_at, 'Checkout' as type FROM checkout_requests WHERE student_id = ?`, [sid]);
+    const checkouts = await all(`SELECT id, 'Hostel Checkout' as title, status, created_at, 'Checkout' as type FROM checkout_requests WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...checkouts.map(i => ({ ...i, icon: 'checkout', color: 'rose' })));
 
     // 6. Guest Passes
-    const guestPasses = await all(`SELECT id, guest_name || ' (' || relation || ')' as title, status, created_at, 'Guest Pass' as type FROM guest_passes WHERE student_id = ?`, [sid]);
+    const guestPasses = await all(`SELECT id, guest_name || ' (' || relation || ')' as title, status, created_at, 'Guest Pass' as type FROM guest_passes WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...guestPasses.map(i => ({ ...i, icon: 'guestpass', color: 'teal' })));
 
     // 7. Fee Billing & Payment Records
-    const feesList = await all(`SELECT id, semester, total_amount, paid_amount, pending_amount, status, due_date FROM fees WHERE student_id = ?`, [sid]);
+    const feesList = await all(`SELECT id, semester, total_amount, paid_amount, pending_amount, status, due_date FROM fees WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     for (const f of feesList) {
       timeline.push({
         id: `fee-${f.id}`,
@@ -836,7 +859,7 @@ export async function getStudentHistory(req, res) {
     }
 
     // 8. Disciplinary Fines & Penalties
-    const fines = await all(`SELECT id, reason, amount, status, created_at FROM fines WHERE student_id = ?`, [sid]);
+    const fines = await all(`SELECT id, reason, amount, status, created_at FROM fines WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...fines.map(i => ({
       id: `fine-${i.id}`,
       title: `Disciplinary Fine Penalty: ${i.reason} (₹${i.amount})`,
@@ -849,7 +872,7 @@ export async function getStudentHistory(req, res) {
     })));
 
     // 9. Canteen Orders
-    const canteenOrders = await all(`SELECT id, total_amount, status, created_at FROM canteen_orders WHERE student_id = ?`, [sid]);
+    const canteenOrders = await all(`SELECT id, total_amount, status, created_at FROM canteen_orders WHERE student_id = ? OR student_id = ?`, [sid, uid]);
     timeline.push(...canteenOrders.map(i => ({
       id: `canteen-${i.id}`,
       title: `Campus Food Canteen Order #${i.id} (₹${i.total_amount})`,
