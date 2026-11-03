@@ -42,36 +42,9 @@ const PAGE_SIZE = 15;
 // Draggable Pan/Slide Scroll Hook for Smooth Click & Drag
 function useDraggableScroll() {
   const [node, setNode] = useState(null);
-  const [scrollProgress, setScrollProgress] = useState(0);
-
-  const handleScroll = useCallback(() => {
-    if (!node) return;
-    const maxScroll = node.scrollWidth - node.clientWidth;
-    if (maxScroll <= 0) {
-      setScrollProgress(0);
-    } else {
-      setScrollProgress(Math.min(100, Math.max(0, Math.round((node.scrollLeft / maxScroll) * 100))));
-    }
-  }, [node]);
-
-  const scrollToPercent = useCallback((pct) => {
-    if (!node) return;
-    const maxScroll = node.scrollWidth - node.clientWidth;
-    if (maxScroll > 0) {
-      node.scrollTo({ left: (pct / 100) * maxScroll, behavior: 'smooth' });
-    }
-  }, [node]);
-
-  const scrollByDelta = useCallback((dx) => {
-    if (!node) return;
-    node.scrollBy({ left: dx, behavior: 'smooth' });
-  }, [node]);
 
   useEffect(() => {
     if (!node) return;
-
-    handleScroll();
-    node.addEventListener('scroll', handleScroll, { passive: true });
 
     let isDown = false;
     let startX = 0;
@@ -102,19 +75,29 @@ function useDraggableScroll() {
       } catch (err) {}
     };
 
+    let rafId = null;
+
     const onPointerMove = (e) => {
       if (!isDown) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      // Drag to pan: moving pointer left (dx < 0) scrolls table right
-      node.scrollLeft = initialScrollLeft - dx * 1.5;
-      node.scrollTop = initialScrollTop - dy * 1.5;
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          node.scrollLeft = initialScrollLeft - dx * 1.5;
+          node.scrollTop = initialScrollTop - dy * 1.5;
+          rafId = null;
+        });
+      }
     };
 
     const onPointerUp = (e) => {
       if (!isDown) return;
       isDown = false;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       node.style.cursor = 'grab';
       node.style.removeProperty('user-select');
 
@@ -128,6 +111,10 @@ function useDraggableScroll() {
     const onPointerCancel = () => {
       if (!isDown) return;
       isDown = false;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       node.style.cursor = 'grab';
       node.style.removeProperty('user-select');
     };
@@ -138,27 +125,27 @@ function useDraggableScroll() {
 
     node.style.cursor = 'grab';
     node.addEventListener('pointerdown', onPointerDown);
-    node.addEventListener('pointermove', onPointerMove);
+    node.addEventListener('pointermove', onPointerMove, { passive: true });
     node.addEventListener('pointerup', onPointerUp);
     node.addEventListener('pointercancel', onPointerCancel);
     node.addEventListener('dragstart', preventDrag);
 
     return () => {
-      node.removeEventListener('scroll', handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
       node.removeEventListener('pointerdown', onPointerDown);
       node.removeEventListener('pointermove', onPointerMove);
       node.removeEventListener('pointerup', onPointerUp);
       node.removeEventListener('pointercancel', onPointerCancel);
       node.removeEventListener('dragstart', preventDrag);
     };
-  }, [node, handleScroll]);
+  }, [node]);
 
-  return { setNode, scrollProgress, scrollToPercent, scrollByDelta };
+  return setNode;
 }
 
 export default function ManageStudents() {
-  const studentsTable = useDraggableScroll();
-  const finesTable = useDraggableScroll();
+  const setStudentsTableRef = useDraggableScroll();
+  const setFinesTableRef = useDraggableScroll();
 
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -742,41 +729,8 @@ export default function ManageStudents() {
           </div>
         ) : (
           <div>
-            {/* Slide Navigation Strip */}
-            <div className="bg-slate-50/90 px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 font-black text-slate-800">
-                <span className="text-base">✋</span>
-                <span>Pan / Slide Directory:</span>
-                <span className="text-slate-500 font-normal text-[11px] hidden sm:inline">(Click & drag anywhere on table to pan, or use slide buttons)</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => studentsTable.scrollByDelta(-350)}
-                  className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-black text-slate-800 transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Slide Left
-                </button>
-                <button
-                  type="button"
-                  onClick={() => studentsTable.scrollByDelta(350)}
-                  className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-black text-slate-800 transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-                >
-                  Slide Right <ChevronRight className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => studentsTable.scrollToPercent(100)}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 ml-1"
-                >
-                  ⚡ Actions & Master Dossier ⏭
-                </button>
-              </div>
-            </div>
-
             <div 
-              ref={studentsTable.setNode}
+              ref={setStudentsTableRef}
               className="overflow-x-auto pb-56 min-h-[50vh] cursor-grab active:cursor-grabbing select-none custom-scrollbar"
             >
               <table className="w-full text-left text-xs min-w-[1550px]">
@@ -1293,41 +1247,9 @@ export default function ManageStudents() {
           </div>
 
           {/* Slide Navigation Strip for Fines Ledger */}
-          <div className="bg-amber-50/90 px-4 py-2.5 border border-amber-200 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 font-black text-amber-950">
-              <span className="text-base">✋</span>
-              <span>Pan / Slide Ledger:</span>
-              <span className="text-amber-800 font-normal text-[11px] hidden sm:inline">(Click & drag table to pan, or jump to Waive Fine)</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => finesTable.scrollByDelta(-300)}
-                className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-amber-300 rounded-xl text-xs font-black text-amber-900 transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Slide Left
-              </button>
-              <button
-                type="button"
-                onClick={() => finesTable.scrollByDelta(300)}
-                className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-amber-300 rounded-xl text-xs font-black text-amber-900 transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-              >
-                Slide Right <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => finesTable.scrollToPercent(100)}
-                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 ml-1"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" /> Jump to Waive Fine ⏭
-              </button>
-            </div>
-          </div>
-
           {/* Fines Table */}
           <div 
-            ref={finesTable.setNode}
+            ref={setFinesTableRef}
             className="max-h-[480px] overflow-auto border border-slate-200 rounded-2xl custom-scrollbar cursor-grab active:cursor-grabbing select-none"
           >
             {finesLoading ? (
