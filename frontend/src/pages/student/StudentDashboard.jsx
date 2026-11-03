@@ -33,18 +33,52 @@ export default function StudentDashboard() {
   const [idModalOpen, setIdModalOpen] = useState(false);
 
 
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        const res = await api.getStudentDashboard();
-        setData(res.dashboard);
-      } catch (err) {
-        console.error('Error fetching student dashboard:', err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchDashboard = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await api.getStudentDashboard();
+      setData(res.dashboard);
+    } catch (err) {
+      console.error('Error fetching student dashboard:', err);
+    } finally {
+      if (!silent) setLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchDashboard();
+
+    // 🔄 4s Real-Time Polling for live dashboard sync
+    const interval = setInterval(() => {
+      fetchDashboard(true);
+    }, 4000);
+
+    // ⚡ Window Focus / Visibility Change Listener (Instantly syncs when user switches back)
+    const handleFocus = () => fetchDashboard(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchDashboard(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 📡 Cross-Tab Sync via BroadcastChannel
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type) {
+          fetchDashboard(true);
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
   }, []);
 
   if (loading) {

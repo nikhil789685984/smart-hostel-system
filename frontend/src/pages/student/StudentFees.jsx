@@ -84,17 +84,18 @@ export default function StudentFees() {
 
   const timerRef = useRef(null);
 
-  const fetchFees = async () => {
+  const fetchFees = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.getMyFees();
       setFeeData(res);
-      if (res.fee) {
+      if (res.fee && !gatewayOpen) {
         setPayAmount(res.fee.pending_amount > 0 ? res.fee.pending_amount.toString() : '45000');
       }
     } catch (err) {
       console.error('Error fetching fees:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -112,6 +113,38 @@ export default function StudentFees() {
   useEffect(() => {
     fetchFees();
     fetchCheckoutRequest();
+
+    // 🔄 3.5s Real-Time Polling across devices
+    const interval = setInterval(() => {
+      fetchFees(true);
+    }, 3500);
+
+    // ⚡ Window Focus / Visibility Change Listener (Instantly syncs when user views screen)
+    const handleFocus = () => fetchFees(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchFees(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 📡 Cross-Tab Sync via BroadcastChannel
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'FEES_UPDATED' || event.data?.type === 'SYNC_ALL') {
+          fetchFees(true);
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
   }, []);
 
   const handleSubmitCheckout = async (e) => {
@@ -174,7 +207,7 @@ export default function StudentFees() {
     if (target === 'fine' && fine) {
       setPayAmount(fine.amount.toString());
     } else {
-      const balance = feeData?.fee ? (feeData.fee.pending_amount + (feeData.fee.late_fine || 0)) : 45000;
+      const balance = feeData?.fee?.pending_amount !== undefined ? feeData.fee.pending_amount : 45000;
       setPayAmount(balance > 0 ? balance.toString() : '45000');
     }
     setOtpStep(false);
@@ -271,6 +304,13 @@ export default function StudentFees() {
       setOtpStep(false);
       setReceiptModalOpen(true);
       fetchFees();
+
+      // Broadcast fee update to all open tabs/windows
+      try {
+        const bc = new BroadcastChannel('hostel_sync_channel');
+        bc.postMessage({ type: 'FEES_UPDATED' });
+        bc.close();
+      } catch (e) {}
     } catch (err) {
       alert(err.message || 'Payment verification failed.');
     } finally {
@@ -1660,6 +1700,13 @@ export default function StudentFees() {
                               setGatewayOpen(false);
                               setReceiptModalOpen(true);
                               fetchFees();
+
+                              // Broadcast fee update to all open tabs/windows
+                              try {
+                                const bc = new BroadcastChannel('hostel_sync_channel');
+                                bc.postMessage({ type: 'FEES_UPDATED' });
+                                bc.close();
+                              } catch (e) {}
                             } else {
                               alert(verifyRes.message);
                             }

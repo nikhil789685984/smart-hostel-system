@@ -35,11 +35,7 @@ export default function ManageParcels() {
   const [historyPage, setHistoryPage] = useState(1);
   const itemsPerPage = 8;
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     try {
       const [parcelRes, stdRes] = await Promise.all([
         api.getAllParcels(),
@@ -50,9 +46,44 @@ export default function ManageParcels() {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+
+    // 🔄 3.5s Real-Time Polling for mailroom
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 3500);
+
+    const handleFocus = () => fetchData(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchData(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 📡 Cross-Tab Sync via BroadcastChannel
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'PARCEL_UPDATED' || event.data?.type === 'SYNC_ALL') {
+          fetchData(true);
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
+  }, []);
 
   const handleReceive = async (e) => {
     e.preventDefault();
@@ -62,6 +93,11 @@ export default function ManageParcels() {
       await api.receiveParcel({ student_id: studentId, courier, tracking_number: trackingNumber });
       setStudentId(''); setStudentSearch(''); setCourier(''); setTrackingNumber('');
       fetchData();
+      try {
+        const bc = new BroadcastChannel('hostel_sync_channel');
+        bc.postMessage({ type: 'PARCEL_UPDATED' });
+        bc.close();
+      } catch (e) {}
     } catch (err) {
       alert(err.message);
     } finally {
@@ -79,6 +115,11 @@ export default function ManageParcels() {
       setVerifyId(null);
       setOtp(['', '', '', '', '', '']);
       fetchData();
+      try {
+        const bc = new BroadcastChannel('hostel_sync_channel');
+        bc.postMessage({ type: 'PARCEL_UPDATED' });
+        bc.close();
+      } catch (e) {}
     } catch (err) {
       alert(err.message);
     } finally {

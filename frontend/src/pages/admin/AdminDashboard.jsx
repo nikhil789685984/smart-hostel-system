@@ -158,7 +158,27 @@ export default function AdminDashboard() {
     const interval = setInterval(() => {
       loadData(true);
     }, 4000);
-    return () => clearInterval(interval);
+
+    const handleFocus = () => loadData(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) loadData(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = () => loadData(true);
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
   }, []);
 
   if (loading) {

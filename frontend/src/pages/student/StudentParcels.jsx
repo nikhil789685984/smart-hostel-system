@@ -7,20 +7,52 @@ export default function StudentParcels() {
   const [loading, setLoading] = useState(true);
   const [revealOtp, setRevealOtp] = useState({});
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.getMyParcels();
       if (res.success) setParcels(res.parcels);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+
+    // 🔄 3.5s Real-Time Polling for parcel delivery / collection status
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 3500);
+
+    const handleFocus = () => fetchData(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchData(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 📡 Cross-Tab Sync via BroadcastChannel
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'PARCEL_UPDATED' || event.data?.type === 'SYNC_ALL') {
+          fetchData(true);
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
+  }, []);
 
   const toggleOtp = (id) => {
     setRevealOtp(prev => ({ ...prev, [id]: !prev[id] }));

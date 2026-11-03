@@ -233,23 +233,49 @@ export default function ManageStudents() {
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (silent = false) => {
     try {
       const res = await api.getAdminStudents({
         search,
         branch: branchFilter,
       });
       setStudents(res.students || []);
-      setCurrentPage(1); // Reset to page 1 on new filter
+      if (!silent) setCurrentPage(1); // Reset to page 1 on new manual filter
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchStudents();
+
+    // 🔄 5s Real-Time Polling for live student ERP changes
+    const interval = setInterval(() => {
+      fetchStudents(true);
+    }, 5000);
+
+    const handleFocus = () => fetchStudents(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchStudents(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = () => fetchStudents(true);
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
   }, [search, branchFilter]);
 
   const handleDelete = async (id, name) => {

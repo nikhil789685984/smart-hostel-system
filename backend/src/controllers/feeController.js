@@ -26,28 +26,50 @@ export async function getMyFees(req, res) {
     const dueDate = fee.due_date;
     const basePending = Math.max(0, (fee.total_amount || 45000) - (fee.paid_amount || 0));
 
-    if (dueDate && dueDate < today && basePending > 0) {
+    if (basePending === 0 || fee.status === 'Paid') {
+      // Fee has been fully settled and cleared
+      if (fee.late_fine > 0 || fee.pending_amount > 0 || fee.status !== 'Paid') {
+        await run(`UPDATE fees SET late_fine = 0, days_overdue = 0, pending_amount = 0, status = 'Paid' WHERE id = ?`, [fee.id]);
+        fee.late_fine = 0;
+        fee.days_overdue = 0;
+        fee.pending_amount = 0;
+        fee.status = 'Paid';
+      }
+    } else if (dueDate && dueDate < today && basePending > 0) {
       const diffMs = new Date(today).getTime() - new Date(dueDate).getTime();
       const calculatedDays = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-      const calculatedFine = calculatedDays * 100; // Strictly ₹100 per overdue day
+      const grossFine = calculatedDays * 100; // Strictly ₹100 per overdue day
 
-      if (fee.late_fine !== calculatedFine || fee.days_overdue !== calculatedDays) {
-        const newTotalPending = basePending + calculatedFine;
+      // Check if student has already settled late fines for this fee
+      const settled = await get(`
+        SELECT COALESCE(SUM(amount), 0) as paid_fine 
+        FROM fines 
+        WHERE fee_id = ? AND status IN ('Paid', 'Waived')
+      `, [fee.id]);
+      const settledFineAmount = settled ? (settled.paid_fine || 0) : 0;
+      const netFine = Math.max(0, grossFine - settledFineAmount);
+
+      const newTotalPending = basePending + netFine;
+      const newStatus = newTotalPending === 0 ? 'Paid' : (netFine > 0 ? 'Overdue' : 'Partial');
+
+      if (fee.late_fine !== netFine || fee.days_overdue !== calculatedDays || fee.pending_amount !== newTotalPending || fee.status !== newStatus) {
         await run(`
           UPDATE fees 
-          SET late_fine = ?, days_overdue = ?, pending_amount = ?, status = 'Overdue'
+          SET late_fine = ?, days_overdue = ?, pending_amount = ?, status = ?
           WHERE id = ?
-        `, [calculatedFine, calculatedDays, newTotalPending, fee.id]);
+        `, [netFine, calculatedDays, newTotalPending, newStatus, fee.id]);
 
-        fee.late_fine = calculatedFine;
+        fee.late_fine = netFine;
         fee.days_overdue = calculatedDays;
         fee.pending_amount = newTotalPending;
-        fee.status = 'Overdue';
+        fee.status = newStatus;
       }
-    } else if (fee.paid_amount >= fee.total_amount && fee.late_fine > 0) {
-      await run(`UPDATE fees SET late_fine = 0, days_overdue = 0 WHERE id = ?`, [fee.id]);
+    } else if (fee.paid_amount >= fee.total_amount) {
+      await run(`UPDATE fees SET late_fine = 0, days_overdue = 0, pending_amount = 0, status = 'Paid' WHERE id = ?`, [fee.id]);
       fee.late_fine = 0;
       fee.days_overdue = 0;
+      fee.pending_amount = 0;
+      fee.status = 'Paid';
     }
 
     // Itemized invoice breakdown
@@ -144,6 +166,15 @@ export async function mockPayFee(req, res) {
           transaction_id = ?, payment_method = ?
       WHERE id = ?
     `, [newPaid, newTotalPending, newStatus, receiptNo, txnId, payment_method || 'UPI / NetBanking', fee.id]);
+
+    if (newStatus === 'Paid') {
+      await run(`
+        UPDATE fines 
+        SET status = 'Paid', paid_date = CURRENT_TIMESTAMP, transaction_id = ?
+        WHERE fee_id = ? AND status != 'Paid'
+      `, [txnId, fee.id]);
+      await run(`UPDATE fees SET late_fine = 0, days_overdue = 0 WHERE id = ?`, [fee.id]);
+    }
 
     try {
       await run(`
@@ -742,6 +773,15 @@ export async function verifyRazorpayPayment(req, res) {
           transaction_id = ?, payment_method = ?
       WHERE id = ?
     `, [newPaid, finalPending, newStatus, receiptNo, generatedPaymentId, methodStr, fee.id]);
+
+    if (newStatus === 'Paid') {
+      await run(`
+        UPDATE fines 
+        SET status = 'Paid', paid_date = CURRENT_TIMESTAMP, transaction_id = ?
+        WHERE fee_id = ? AND status != 'Paid'
+      `, [generatedPaymentId, fee.id]);
+      await run(`UPDATE fees SET late_fine = 0, days_overdue = 0 WHERE id = ?`, [fee.id]);
+    }
 
     await run(`
       INSERT INTO fee_transactions (fee_id, student_id, amount, payment_method, transaction_id, receipt_number)

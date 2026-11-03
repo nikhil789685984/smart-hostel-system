@@ -37,14 +37,9 @@ export default function FeeGovernance() {
   // Modal for full student details
   const [detailStudent, setDetailStudent] = useState(null);
 
-  useEffect(() => {
-    setCurrentPage(1);
-    fetchDefaulters();
-  }, [activeFilter, selectedSemester]);
-
-  const fetchDefaulters = async () => {
+  const fetchDefaulters = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = {};
       if (activeFilter !== 'all') params.filter = activeFilter;
       if (selectedSemester !== 'All') params.semester = selectedSemester;
@@ -53,11 +48,42 @@ export default function FeeGovernance() {
       const res = await api.getAIDefaulters(params);
       setData(res);
     } catch (err) {
-      console.error('Failed to fetch fee audit data:', err);
+      console.error('Error fetching fee defaulters:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setCurrentPage(1);
+    fetchDefaulters();
+
+    // 🔄 4s Real-Time Polling for live Fee Governance
+    const interval = setInterval(() => {
+      fetchDefaulters(true);
+    }, 4000);
+
+    const handleFocus = () => fetchDefaulters(true);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchDefaulters(true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = () => fetchDefaulters(true);
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
+  }, [activeFilter, selectedSemester]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

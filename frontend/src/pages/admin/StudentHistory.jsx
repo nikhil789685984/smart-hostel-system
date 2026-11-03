@@ -17,8 +17,45 @@ export default function StudentHistory() {
   const tabs = ['All', 'Payment', 'Fee Billing', 'Room Downgrade Refund', 'Gate Pass', 'Guest Pass', 'Complaint', 'Parcel', 'Room Request', 'Checkout', 'Fine', 'Canteen Order'];
 
 
+  const selectedStudentRef = React.useRef(null);
+  selectedStudentRef.current = selectedStudent;
+
   useEffect(() => {
     fetchStudents();
+
+    // 🔄 4s Real-Time Polling for active student history
+    const interval = setInterval(() => {
+      if (selectedStudentRef.current) {
+        loadHistory(selectedStudentRef.current, true);
+      }
+    }, 4000);
+
+    const handleFocus = () => {
+      if (selectedStudentRef.current) loadHistory(selectedStudentRef.current, true);
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden && selectedStudentRef.current) loadHistory(selectedStudentRef.current, true);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('hostel_sync_channel');
+      bc.onmessage = (event) => {
+        if (selectedStudentRef.current) {
+          loadHistory(selectedStudentRef.current, true);
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (bc) bc.close();
+    };
   }, []);
 
   const fetchStudents = async () => {
@@ -27,7 +64,7 @@ export default function StudentHistory() {
       if (res.success) {
         const list = res.students || [];
         setStudents(list);
-        if (list.length > 0) {
+        if (list.length > 0 && !selectedStudentRef.current) {
           loadHistory(list[0]);
         }
       }
@@ -38,10 +75,12 @@ export default function StudentHistory() {
     }
   };
 
-  const loadHistory = async (student) => {
+  const loadHistory = async (student, silent = false) => {
     setSelectedStudent(student);
-    setHistoryLoading(true);
-    setHistoryData(null);
+    if (!silent) {
+      setHistoryLoading(true);
+      setHistoryData(null);
+    }
     try {
       const res = await api.getStudentHistory(student.id);
       if (res.success) {
@@ -50,7 +89,7 @@ export default function StudentHistory() {
     } catch (err) {
       console.error('Failed to load history');
     } finally {
-      setHistoryLoading(false);
+      if (!silent) setHistoryLoading(false);
     }
   };
 
