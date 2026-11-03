@@ -114,17 +114,20 @@
   }
 }
 
-/* Custom Scrollbar for Action Cards */
+/* Custom Scrollbar for Action Cards & Draggable Tables */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
+  height: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f1f5f9;
+  border-radius: 8px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 10px;
+  background: #94a3b8;
+  border-radius: 8px;
+  border: 2px solid #f1f5f9;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: #64748b;
 }

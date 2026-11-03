@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../services/api';
@@ -42,75 +42,123 @@ const PAGE_SIZE = 15;
 // Draggable Pan/Slide Scroll Hook for Smooth Click & Drag
 function useDraggableScroll() {
   const [node, setNode] = useState(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
+
+  const handleScroll = useCallback(() => {
+    if (!node) return;
+    const maxScroll = node.scrollWidth - node.clientWidth;
+    if (maxScroll <= 0) {
+      setScrollProgress(0);
+    } else {
+      setScrollProgress(Math.min(100, Math.max(0, Math.round((node.scrollLeft / maxScroll) * 100))));
+    }
+  }, [node]);
+
+  const scrollToPercent = useCallback((pct) => {
+    if (!node) return;
+    const maxScroll = node.scrollWidth - node.clientWidth;
+    if (maxScroll > 0) {
+      node.scrollTo({ left: (pct / 100) * maxScroll, behavior: 'smooth' });
+    }
+  }, [node]);
+
+  const scrollByDelta = useCallback((dx) => {
+    if (!node) return;
+    node.scrollBy({ left: dx, behavior: 'smooth' });
+  }, [node]);
 
   useEffect(() => {
     if (!node) return;
 
+    handleScroll();
+    node.addEventListener('scroll', handleScroll, { passive: true });
+
     let isDown = false;
     let startX = 0;
     let startY = 0;
-    let scrollLeft = 0;
-    let scrollTop = 0;
+    let initialScrollLeft = 0;
+    let initialScrollTop = 0;
 
-    const onMouseDown = (e) => {
+    const onPointerDown = (e) => {
+      // Primary mouse button or touch/pen
+      if (e.button !== undefined && e.button !== 0) return;
+
       // Don't intercept clicks on interactive buttons, links, inputs, selects, dropdowns
-      if (e.target.closest('button, input, select, textarea, a, [role="button"]')) {
+      if (e.target.closest('button, input, select, textarea, a, [role="button"], label')) {
         return;
       }
+
       isDown = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      initialScrollLeft = node.scrollLeft;
+      initialScrollTop = node.scrollTop;
+
       node.style.cursor = 'grabbing';
       node.style.userSelect = 'none';
-      startX = e.pageX - node.offsetLeft;
-      startY = e.pageY - node.offsetTop;
-      scrollLeft = node.scrollLeft;
-      scrollTop = node.scrollTop;
+
+      try {
+        node.setPointerCapture(e.pointerId);
+      } catch (err) {}
     };
 
-    const onMouseLeave = () => {
+    const onPointerMove = (e) => {
+      if (!isDown) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // Drag to pan: moving pointer left (dx < 0) scrolls table right
+      node.scrollLeft = initialScrollLeft - dx * 1.5;
+      node.scrollTop = initialScrollTop - dy * 1.5;
+    };
+
+    const onPointerUp = (e) => {
+      if (!isDown) return;
+      isDown = false;
+      node.style.cursor = 'grab';
+      node.style.removeProperty('user-select');
+
+      try {
+        if (node.hasPointerCapture(e.pointerId)) {
+          node.releasePointerCapture(e.pointerId);
+        }
+      } catch (err) {}
+    };
+
+    const onPointerCancel = () => {
       if (!isDown) return;
       isDown = false;
       node.style.cursor = 'grab';
       node.style.removeProperty('user-select');
     };
 
-    const onMouseUp = () => {
-      if (!isDown) return;
-      isDown = false;
-      node.style.cursor = 'grab';
-      node.style.removeProperty('user-select');
-    };
-
-    const onMouseMove = (e) => {
-      if (!isDown) return;
+    const preventDrag = (e) => {
       e.preventDefault();
-      const x = e.pageX - node.offsetLeft;
-      const y = e.pageY - node.offsetTop;
-      const walkX = (x - startX) * 1.5;
-      const walkY = (y - startY) * 1.5;
-      node.scrollLeft = scrollLeft - walkX;
-      node.scrollTop = scrollTop - walkY;
     };
 
     node.style.cursor = 'grab';
-    node.addEventListener('mousedown', onMouseDown);
-    node.addEventListener('mouseleave', onMouseLeave);
-    node.addEventListener('mouseup', onMouseUp);
-    node.addEventListener('mousemove', onMouseMove);
+    node.addEventListener('pointerdown', onPointerDown);
+    node.addEventListener('pointermove', onPointerMove);
+    node.addEventListener('pointerup', onPointerUp);
+    node.addEventListener('pointercancel', onPointerCancel);
+    node.addEventListener('dragstart', preventDrag);
 
     return () => {
-      node.removeEventListener('mousedown', onMouseDown);
-      node.removeEventListener('mouseleave', onMouseLeave);
-      node.removeEventListener('mouseup', onMouseUp);
-      node.removeEventListener('mousemove', onMouseMove);
+      node.removeEventListener('scroll', handleScroll);
+      node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener('pointermove', onPointerMove);
+      node.removeEventListener('pointerup', onPointerUp);
+      node.removeEventListener('pointercancel', onPointerCancel);
+      node.removeEventListener('dragstart', preventDrag);
     };
-  }, [node]);
+  }, [node, handleScroll]);
 
-  return setNode;
+  return { setNode, scrollProgress, scrollToPercent, scrollByDelta };
 }
 
 export default function ManageStudents() {
-  const setStudentsTableRef = useDraggableScroll();
-  const setFinesTableRef = useDraggableScroll();
+  const studentsTable = useDraggableScroll();
+  const finesTable = useDraggableScroll();
 
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -694,33 +742,90 @@ export default function ManageStudents() {
           </div>
         ) : (
           <div>
-            <div className="bg-slate-50/90 px-6 py-2.5 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-600">
-              <span className="flex items-center gap-1.5 font-bold text-slate-800">
-                <span className="text-sm">✋</span> <strong>Slide & Drag:</strong> Click and drag anywhere with mouse (or swipe on touch) to slide directory table freely
-              </span>
-              <span className="text-slate-400 font-mono text-[10px] hidden sm:inline">↔️ Pan / Drag to view all details</span>
+            {/* Interactive Slide Control Bar */}
+            <div className="bg-gradient-to-r from-slate-50 via-slate-100/90 to-slate-50 px-5 py-3 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2 text-xs text-slate-800 font-bold w-full md:w-auto">
+                <span className="text-base">✋</span>
+                <span className="whitespace-nowrap font-black">Slide Directory:</span>
+                <span className="text-slate-500 font-normal text-[11px] hidden sm:inline">(Drag table with mouse/touch OR slide bar)</span>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full md:w-auto flex-1 max-w-xl">
+                <button
+                  type="button"
+                  onClick={() => studentsTable.scrollByDelta(-350)}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-black text-slate-800 transition flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer active:scale-95"
+                  title="Slide Left"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Left
+                </button>
+
+                <div className="flex items-center gap-2 flex-1 relative">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={studentsTable.scrollProgress}
+                    onChange={(e) => studentsTable.scrollToPercent(Number(e.target.value))}
+                    className="w-full accent-rose-600 h-2 bg-slate-200 rounded-lg cursor-pointer"
+                    title="Drag slider left/right to slide directory"
+                  />
+                  <span className="text-[11px] font-mono font-bold text-slate-600 w-9 text-right shrink-0">
+                    {studentsTable.scrollProgress}%
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => studentsTable.scrollByDelta(350)}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-black text-slate-800 transition flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer active:scale-95"
+                  title="Slide Right"
+                >
+                  Right <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => studentsTable.scrollToPercent(0)}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-slate-700 font-black transition cursor-pointer shadow-2xs active:scale-95"
+                  title="Jump to Student Names"
+                >
+                  ⏮ Resident Names
+                </button>
+                <button
+                  type="button"
+                  onClick={() => studentsTable.scrollToPercent(100)}
+                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-xl text-rose-700 font-black transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                  title="Jump directly to Actions"
+                >
+                  ⚡ Actions ⏭
+                </button>
+              </div>
             </div>
+
             <div 
-              ref={setStudentsTableRef}
+              ref={studentsTable.setNode}
               className="overflow-x-auto pb-56 min-h-[50vh] cursor-grab active:cursor-grabbing select-none custom-scrollbar"
             >
-              <table className="w-full text-left text-xs min-w-[1100px]">
+              <table className="w-full text-left text-xs min-w-[1550px]">
                 <thead className="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100 sticky top-0 z-10">
                   <tr>
-                    <th className="py-3.5 px-6 min-w-[240px] whitespace-nowrap">Student Resident</th>
+                    <th className="py-3.5 px-6 min-w-[260px] whitespace-nowrap">Student Resident</th>
                     <th className="py-3.5 px-6 min-w-[140px] whitespace-nowrap">Roll Number</th>
-                    <th className="py-3.5 px-6 min-w-[200px]">Academic Program</th>
+                    <th className="py-3.5 px-6 min-w-[220px]">Academic Program</th>
                     <th className="py-3.5 px-6 min-w-[180px] whitespace-nowrap">Room Allotment</th>
-                    <th className="py-3.5 px-6 min-w-[220px]">Care Taker / Warden</th>
+                    <th className="py-3.5 px-6 min-w-[240px]">Care Taker / Warden</th>
                     <th className="py-3.5 px-6 min-w-[140px] whitespace-nowrap">Hostel Status</th>
-                    <th className="py-3.5 px-6 min-w-[120px] whitespace-nowrap">Fee Status</th>
-                    <th className="py-3.5 px-6 text-right min-w-[280px] whitespace-nowrap sticky right-0 bg-slate-50/95 backdrop-blur-sm shadow-l">Actions</th>
+                    <th className="py-3.5 px-6 min-w-[130px] whitespace-nowrap">Fee Status</th>
+                    <th className="py-3.5 px-6 text-right min-w-[320px] whitespace-nowrap sticky right-0 bg-slate-50/95 backdrop-blur-sm shadow-l z-10">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {paginatedStudents.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3.5 px-6 min-w-[240px]">
+                      <td className="py-3.5 px-6 min-w-[260px]">
                         <div className="flex items-center gap-3">
                           <img
                             src={s.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
@@ -733,9 +838,9 @@ export default function ManageStudents() {
                           </div>
                         </div>
                       </td>
-                    <td className="py-3.5 px-6 font-mono font-black text-slate-800">{s.roll_number}</td>
-                    <td className="py-3.5 px-6">
-                      <p className="font-bold text-slate-900 truncate max-w-[200px]">{s.branch}</p>
+                    <td className="py-3.5 px-6 font-mono font-black text-slate-800 whitespace-nowrap">{s.roll_number}</td>
+                    <td className="py-3.5 px-6 min-w-[220px]">
+                      <p className="font-bold text-slate-900 whitespace-nowrap">{s.branch}</p>
                       <span className="text-[10px] text-slate-400">Year {s.year} • Semester {s.semester}</span>
                     </td>
                     <td className="py-3.5 px-6">
@@ -805,7 +910,7 @@ export default function ManageStudents() {
                         {s.fee_status || 'Pending'}
                       </span>
                     </td>
-                    <td className="py-3.5 px-6 text-right min-w-[280px] whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-sm shadow-l z-10">
+                    <td className="py-3.5 px-6 text-right min-w-[320px] whitespace-nowrap sticky right-0 bg-white/95 backdrop-blur-sm shadow-l z-10">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
                         {/* Primary View Action 1 */}
                         <button
@@ -1217,17 +1322,72 @@ export default function ManageStudents() {
             ))}
           </div>
 
-          {/* Draggable Slide Guide Banner */}
-          <div className="bg-amber-50/90 border border-amber-200 text-amber-900 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs">
-            <span className="flex items-center gap-2 font-bold">
-              <span className="text-base">✋</span> <strong>Click & Drag to Slide:</strong> Click anywhere on the ledger and drag your mouse (or swipe on touch) to freely slide horizontally & vertically.
-            </span>
-            <span className="text-[11px] text-amber-700 font-mono hidden sm:inline">↔️ Pan / Drag Mode Active</span>
+          {/* Interactive Slide Control Bar for Fines Ledger */}
+          <div className="bg-gradient-to-r from-amber-50 via-slate-50 to-amber-50 px-4 py-2.5 border border-amber-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3 text-xs shadow-2xs">
+            <div className="flex items-center gap-2 font-bold text-amber-950 w-full md:w-auto">
+              <span className="text-base">✋</span>
+              <span className="whitespace-nowrap font-black">Slide Ledger:</span>
+              <span className="text-amber-800/80 font-normal text-[11px] hidden sm:inline">(Drag table with mouse/touch OR slide bar)</span>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full md:w-auto flex-1 max-w-lg">
+              <button
+                type="button"
+                onClick={() => finesTable.scrollByDelta(-300)}
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-amber-300 rounded-xl font-black text-amber-900 transition flex items-center gap-1 shrink-0 cursor-pointer active:scale-95 text-xs shadow-2xs"
+                title="Slide Left"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Left
+              </button>
+
+              <div className="flex items-center gap-2 flex-1 relative">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={finesTable.scrollProgress}
+                  onChange={(e) => finesTable.scrollToPercent(Number(e.target.value))}
+                  className="w-full accent-amber-600 h-2 bg-amber-100 rounded-lg cursor-pointer"
+                  title="Drag slider left/right to view fines and actions"
+                />
+                <span className="text-[11px] font-mono font-bold text-amber-900 w-8 text-right shrink-0">
+                  {finesTable.scrollProgress}%
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => finesTable.scrollByDelta(300)}
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-amber-300 rounded-xl font-black text-amber-900 transition flex items-center gap-1 shrink-0 cursor-pointer active:scale-95 text-xs shadow-2xs"
+                title="Slide Right"
+              >
+                Right <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+              <button
+                type="button"
+                onClick={() => finesTable.scrollToPercent(0)}
+                className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl text-slate-700 font-black transition cursor-pointer shadow-2xs active:scale-95"
+                title="Jump to Student Names"
+              >
+                ⏮ Resident Names
+              </button>
+              <button
+                type="button"
+                onClick={() => finesTable.scrollToPercent(100)}
+                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black transition cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
+                title="Jump directly to Waive Fine action"
+              >
+                <CheckCircle2 className="w-3 h-3 text-white" /> Waive Fine ⏭
+              </button>
+            </div>
           </div>
 
           {/* Fines Table */}
           <div 
-            ref={setFinesTableRef}
+            ref={finesTable.setNode}
             className="max-h-[480px] overflow-auto border border-slate-200 rounded-2xl custom-scrollbar cursor-grab active:cursor-grabbing select-none"
           >
             {finesLoading ? (
@@ -1240,7 +1400,7 @@ export default function ManageStudents() {
                 No fines or infractions recorded on campus.
               </div>
             ) : (
-              <table className="w-full text-left text-xs min-w-[1100px]">
+              <table className="w-full text-left text-xs min-w-[1300px]">
                 <thead className="bg-slate-50 text-slate-500 uppercase font-bold tracking-wider border-b border-slate-200 sticky top-0 z-10">
                   <tr>
                     <th className="py-3 px-4 min-w-[240px] whitespace-nowrap">Student Resident</th>
