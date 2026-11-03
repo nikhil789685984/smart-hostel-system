@@ -27,12 +27,12 @@ export default function Modal({ isOpen, onClose, title, subtitle, children, maxW
           onClick={onClose}
         />
 
-        {/* Modal Dialog Card - Perfectly Centered Dead-Center */}
+        {/* Modal Dialog Card - Perfectly Centered Dead-Center with Mobile Scroll Support */}
         <div
-          className={`relative transform overflow-hidden rounded-3xl bg-white text-left shadow-2xl transition-all sm:my-8 w-full ${maxWidth} border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-150`}
+          className={`relative transform rounded-3xl bg-white text-left shadow-2xl transition-all sm:my-8 w-full ${maxWidth} border border-slate-200 z-10 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col overflow-hidden my-auto`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+          <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/80 shrink-0">
             <div>
               <h3 className="text-lg font-black text-slate-900 leading-tight">{title}</h3>
               {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
@@ -48,7 +48,7 @@ export default function Modal({ isOpen, onClose, title, subtitle, children, maxW
           </div>
 
           {/* Body */}
-          <div className="p-6">{children}</div>
+          <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1">{children}</div>
         </div>
       </div>
     </div>

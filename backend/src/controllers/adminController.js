@@ -107,6 +107,7 @@ export async function getAllHostels(req, res) {
 }
 
 export async function createStudent(req, res) {
+  let createdUserId = null;
   try {
     const {
       name, email, password, phone, roll_number, course, branch, year, semester,
@@ -114,17 +115,63 @@ export async function createStudent(req, res) {
       dob, gender, blood_group, aadhar_number, address_line, city, state, pincode, cgpa, enrollment_number
     } = req.body;
 
-    if (!name || !email || !roll_number) {
-      return res.status(400).json({ success: false, message: 'Name, email, and roll number are required.' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Student Full Name is required.' });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ success: false, message: 'Student Campus Email is required.' });
+    }
+    if (!roll_number || !roll_number.trim()) {
+      return res.status(400).json({ success: false, message: 'Student Roll Number is required.' });
+    }
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanRoll = roll_number.trim().toUpperCase();
+
+    // Check if email is already in use
+    const existingUser = await get('SELECT id, name FROM users WHERE LOWER(email) = ?', [cleanEmail]);
+    if (existingUser) {
+      // Check if it is an orphan user from a prior interrupted insert
+      const existingStudent = await get('SELECT id FROM students WHERE user_id = ?', [existingUser.id]);
+      if (!existingStudent) {
+        // Safe to clear orphan user record to allow registration
+        await run('DELETE FROM users WHERE id = ?', [existingUser.id]);
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Campus email "${cleanEmail}" is already registered to resident "${existingUser.name}". Please provide a unique email address.` 
+        });
+      }
+    }
+
+    // Check if roll number is already assigned
+    const existingRoll = await get(`
+      SELECT s.id, u.name 
+      FROM students s 
+      JOIN users u ON u.id = s.user_id 
+      WHERE UPPER(s.roll_number) = ?
+    `, [cleanRoll]);
+    if (existingRoll) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Roll Number "${cleanRoll}" is already assigned to resident "${existingRoll.name}". Please enter a unique roll number.` 
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password || 'student123', salt);
+    const password_hash = await bcrypt.hash((password && password.trim()) || 'student123', salt);
 
     const userResult = await run(`
       INSERT INTO users (name, email, password_hash, role, phone, avatar_url)
       VALUES (?, ?, ?, 'student', ?, 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150')
-    `, [name, email.toLowerCase(), password_hash, phone || null]);
+    `, [cleanName, cleanEmail, password_hash, (phone && phone.trim()) || '+91 98765 43210']);
+
+    createdUserId = userResult.insertId;
+
+    // Pick an active caretaker for the student based on gender/wing if possible
+    const ctRecord = await get('SELECT id FROM caretakers ORDER BY RANDOM() LIMIT 1');
+    const caretakerId = ctRecord ? ctRecord.id : null;
 
     const studentResult = await run(`
       INSERT INTO students (
@@ -132,13 +179,13 @@ export async function createStudent(req, res) {
         dob, gender, blood_group, aadhar_number,
         father_name, father_phone, father_occupation, mother_name, mother_phone,
         parent_name, parent_phone, parent_email, emergency_contact,
-        address_line, city, state, pincode, checkin_date, status
+        address_line, city, state, pincode, checkin_date, status, caretaker_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, 'active')
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, 'active', ?)
     `, [
-      userResult.insertId,
-      roll_number.toUpperCase(),
-      enrollment_number || `EN2026${roll_number.toUpperCase()}`,
+      createdUserId,
+      cleanRoll,
+      (enrollment_number && enrollment_number.trim()) || `EN2026${cleanRoll}`,
       course || 'B.Tech',
       branch || 'Computer Science & Engineering',
       parseInt(year || '1', 10),
@@ -154,23 +201,40 @@ export async function createStudent(req, res) {
       mother_name || 'Sunita Sharma',
       mother_phone || '+91 98765 22222',
       father_name || 'Parent',
-      father_phone || phone || '+91 98765 11111',
+      father_phone || (phone && phone.trim()) || '+91 98765 11111',
       parent_email || 'parent.guardians@gmail.com',
-      father_phone || phone || '+91 98765 11111',
+      father_phone || (phone && phone.trim()) || '+91 98765 11111',
       address_line || '124-B Green Park Avenue',
       city || 'New Delhi',
       state || 'Delhi',
-      pincode || '110016'
+      pincode || '110016',
+      caretakerId
     ]);
 
-    // Create fee entry
+    // Create initial semester fee demand
     await run(`
       INSERT INTO fees (student_id, semester, total_amount, paid_amount, pending_amount, due_date, status)
       VALUES (?, ?, 45000.0, 0.0, 45000.0, date('now', '+30 days'), 'Pending')
     `, [studentResult.insertId, parseInt(semester || '1', 10)]);
 
-    res.status(201).json({ success: true, message: 'Student enrolled successfully with full master record.' });
+    res.status(201).json({ 
+      success: true, 
+      message: `Student "${cleanName}" (${cleanRoll}) enrolled successfully with financial clearing account.`,
+      student: {
+        id: studentResult.insertId,
+        user_id: createdUserId,
+        name: cleanName,
+        email: cleanEmail,
+        roll_number: cleanRoll
+      }
+    });
   } catch (err) {
+    // Rollback orphan user row if student insertion failed
+    if (createdUserId) {
+      try {
+        await run('DELETE FROM users WHERE id = ?', [createdUserId]);
+      } catch (_) {}
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 }

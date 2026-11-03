@@ -49,6 +49,7 @@ export default function ManageStudents() {
   const [checkingOutId, setCheckingOutId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
+  const [enrolError, setEnrolError] = useState(null);
   const [selectedStudentForId, setSelectedStudentForId] = useState(null);
   const [selectedStudentMasterRecord, setSelectedStudentMasterRecord] = useState(null);
   const [masterTab, setMasterTab] = useState('personal'); // 'personal' | 'parents' | 'address' | 'academic'
@@ -233,10 +234,11 @@ export default function ManageStudents() {
     }
   };
 
-  const fetchStudents = async (silent = false) => {
+  const fetchStudents = async (silent = false, overrideSearch = null) => {
     try {
+      const q = overrideSearch !== null ? overrideSearch : search;
       const res = await api.getAdminStudents({
-        search,
+        search: q,
         branch: branchFilter,
       });
       setStudents(res.students || []);
@@ -391,10 +393,12 @@ export default function ManageStudents() {
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
+    setEnrolError(null);
     setSubmitting(true);
+    const createdName = (formData.name || '').trim();
+    const createdRoll = (formData.roll_number || '').trim().toUpperCase();
     try {
       await api.createStudent(formData);
-      setMsg(`Student ${formData.name} enrolled with initial semester fee account.`);
       setModalOpen(false);
       setFormData({
         name: '',
@@ -407,10 +411,15 @@ export default function ManageStudents() {
         semester: '1',
         password: 'student123',
       });
-      fetchStudents();
-      setTimeout(() => setMsg(null), 5000);
+      // Automatically search for the newly enrolled student so they appear at the top immediately
+      setSearch(createdRoll);
+      await fetchStudents(false, createdRoll);
+      setMsg(`🎉 Resident ${createdName} (${createdRoll}) enrolled successfully! Record opened in directory below.`);
+      setTimeout(() => setMsg(null), 8000);
     } catch (err) {
-      alert(err.message || 'Error creating student');
+      const errMsg = err.message || 'Error creating student account';
+      setEnrolError(errMsg);
+      console.error('Enrollment error:', err);
     } finally {
       setSubmitting(false);
     }
@@ -506,7 +515,7 @@ export default function ManageStudents() {
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setModalOpen(true)}
+            onClick={() => { setEnrolError(null); setModalOpen(true); }}
             className="px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md shadow-rose-600/30 transition flex items-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[3]" /> Enrol Resident
@@ -555,8 +564,21 @@ export default function ManageStudents() {
               placeholder="Search by student name, roll number, or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 w-full text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-600"
+              className="pl-9 pr-8 py-2 w-full text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-600"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  fetchStudents(false, '');
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                title="Clear filter / view all residents"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -938,21 +960,31 @@ export default function ManageStudents() {
       {/* Enrol Modal */}
       <Modal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setEnrolError(null); }}
         title="Enrol New Student Resident"
-        subtitle="Registers student account and prepares room fee ledger"
+        subtitle="Registers student account, assigns duty caretaker & initializes fee clearing ledger"
       >
         <form onSubmit={handleCreateSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          {enrolError && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-black text-rose-900">Enrolment Incomplete</p>
+                <p className="text-[11px] text-rose-700 mt-0.5 leading-relaxed">{enrolError}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Full Name *</label>
               <input
                 type="text"
                 required
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => { setEnrolError(null); setFormData({ ...formData, name: e.target.value }); }}
                 placeholder="e.g. Siddharth Rao"
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-rose-500"
               />
             </div>
 
@@ -962,44 +994,45 @@ export default function ManageStudents() {
                 type="text"
                 required
                 value={formData.roll_number}
-                onChange={(e) => setFormData({ ...formData, roll_number: e.target.value })}
-                placeholder="e.g. 22BCSE199"
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 uppercase font-mono"
+                onChange={(e) => { setEnrolError(null); setFormData({ ...formData, roll_number: e.target.value }); }}
+                placeholder="e.g. 24BCSE199"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 uppercase font-mono focus:outline-rose-500"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Campus Email *</label>
               <input
                 type="email"
                 required
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => { setEnrolError(null); setFormData({ ...formData, email: e.target.value }); }}
                 placeholder="sid@hostel.com"
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-rose-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Default Password</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Mobile Contact Phone</label>
               <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300"
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="+91 98765 43210"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-rose-500 font-mono"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Branch</label>
               <select
                 value={formData.branch}
                 onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-rose-500"
               >
                 <option>Computer Science & Engineering</option>
                 <option>Information Technology</option>
@@ -1014,7 +1047,7 @@ export default function ManageStudents() {
               <select
                 value={formData.year}
                 onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-rose-500"
               >
                 <option value="1">Year 1</option>
                 <option value="2">Year 2</option>
@@ -1028,7 +1061,7 @@ export default function ManageStudents() {
               <select
                 value={formData.semester}
                 onChange={(e) => setFormData({ ...formData, semester: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-rose-500"
               >
                 <option value="1">Sem 1</option>
                 <option value="2">Sem 2</option>
@@ -1045,17 +1078,24 @@ export default function ManageStudents() {
           <div className="pt-2 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+              onClick={() => { setModalOpen(false); setEnrolError(null); }}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-5 py-2 text-xs font-bold bg-rose-600 text-white rounded-xl hover:bg-rose-700 shadow transition"
+              className="px-5 py-2 text-xs font-bold bg-rose-600 text-white rounded-xl hover:bg-rose-700 shadow transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
             >
-              {submitting ? 'Enrolling...' : 'Enrol Student'}
+              {submitting ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Enrolling Resident...</span>
+                </>
+              ) : (
+                'Enrol Student'
+              )}
             </button>
           </div>
         </form>
