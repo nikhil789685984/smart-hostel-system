@@ -114,7 +114,11 @@
   }
 }
 
-/* Custom Scrollbar for Action Cards & Draggable Tables */
+/* Custom Scrollbar with Silky Smooth Scrolling */
+.custom-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 10px;

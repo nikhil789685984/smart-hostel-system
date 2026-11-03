@@ -39,114 +39,7 @@ import DigitalIDCard from '../../components/ui/DigitalIDCard';
 
 const PAGE_SIZE = 15;
 
-// Draggable Pan/Slide Scroll Hook for Smooth Click & Drag
-function useDraggableScroll() {
-  const [node, setNode] = useState(null);
-
-  useEffect(() => {
-    if (!node) return;
-
-    let isDown = false;
-    let startX = 0;
-    let startY = 0;
-    let initialScrollLeft = 0;
-    let initialScrollTop = 0;
-
-    const onPointerDown = (e) => {
-      // Primary mouse button or touch/pen
-      if (e.button !== undefined && e.button !== 0) return;
-
-      // Don't intercept clicks on interactive buttons, links, inputs, selects, dropdowns
-      if (e.target.closest('button, input, select, textarea, a, [role="button"], label')) {
-        return;
-      }
-
-      isDown = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      initialScrollLeft = node.scrollLeft;
-      initialScrollTop = node.scrollTop;
-
-      node.style.cursor = 'grabbing';
-      node.style.userSelect = 'none';
-
-      try {
-        node.setPointerCapture(e.pointerId);
-      } catch (err) {}
-    };
-
-    let rafId = null;
-
-    const onPointerMove = (e) => {
-      if (!isDown) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      if (!rafId) {
-        rafId = requestAnimationFrame(() => {
-          node.scrollLeft = initialScrollLeft - dx * 1.5;
-          node.scrollTop = initialScrollTop - dy * 1.5;
-          rafId = null;
-        });
-      }
-    };
-
-    const onPointerUp = (e) => {
-      if (!isDown) return;
-      isDown = false;
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      node.style.cursor = 'grab';
-      node.style.removeProperty('user-select');
-
-      try {
-        if (node.hasPointerCapture(e.pointerId)) {
-          node.releasePointerCapture(e.pointerId);
-        }
-      } catch (err) {}
-    };
-
-    const onPointerCancel = () => {
-      if (!isDown) return;
-      isDown = false;
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      node.style.cursor = 'grab';
-      node.style.removeProperty('user-select');
-    };
-
-    const preventDrag = (e) => {
-      e.preventDefault();
-    };
-
-    node.style.cursor = 'grab';
-    node.addEventListener('pointerdown', onPointerDown);
-    node.addEventListener('pointermove', onPointerMove, { passive: true });
-    node.addEventListener('pointerup', onPointerUp);
-    node.addEventListener('pointercancel', onPointerCancel);
-    node.addEventListener('dragstart', preventDrag);
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      node.removeEventListener('pointerdown', onPointerDown);
-      node.removeEventListener('pointermove', onPointerMove);
-      node.removeEventListener('pointerup', onPointerUp);
-      node.removeEventListener('pointercancel', onPointerCancel);
-      node.removeEventListener('dragstart', preventDrag);
-    };
-  }, [node]);
-
-  return setNode;
-}
-
 export default function ManageStudents() {
-  const setStudentsTableRef = useDraggableScroll();
-  const setFinesTableRef = useDraggableScroll();
-
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -729,21 +622,18 @@ export default function ManageStudents() {
           </div>
         ) : (
           <div>
-            <div 
-              ref={setStudentsTableRef}
-              className="overflow-x-auto pb-56 min-h-[50vh] cursor-grab active:cursor-grabbing select-none custom-scrollbar"
-            >
-              <table className="w-full text-left text-xs min-w-[1550px]">
+            <div className="overflow-x-auto pb-56 min-h-[50vh] scroll-smooth overscroll-contain custom-scrollbar">
+              <table className="w-full text-left text-xs min-w-[1200px]">
                 <thead className="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100 sticky top-0 z-10">
                   <tr>
-                    <th className="py-3.5 px-6 min-w-[260px] whitespace-nowrap">Student Resident</th>
+                    <th className="py-3.5 px-6 min-w-[240px] whitespace-nowrap">Student Resident</th>
                     <th className="py-3.5 px-6 min-w-[140px] whitespace-nowrap">Roll Number</th>
-                    <th className="py-3.5 px-6 min-w-[220px]">Academic Program</th>
+                    <th className="py-3.5 px-6 min-w-[200px]">Academic Program</th>
                     <th className="py-3.5 px-6 min-w-[180px] whitespace-nowrap">Room Allotment</th>
-                    <th className="py-3.5 px-6 min-w-[240px]">Care Taker / Warden</th>
+                    <th className="py-3.5 px-6 min-w-[220px]">Care Taker / Warden</th>
                     <th className="py-3.5 px-6 min-w-[140px] whitespace-nowrap">Hostel Status</th>
-                    <th className="py-3.5 px-6 min-w-[130px] whitespace-nowrap">Fee Status</th>
-                    <th className="py-3.5 px-6 text-right min-w-[320px] whitespace-nowrap sticky right-0 bg-slate-50/95 backdrop-blur-sm shadow-l z-10">Actions</th>
+                    <th className="py-3.5 px-6 min-w-[120px] whitespace-nowrap">Fee Status</th>
+                    <th className="py-3.5 px-6 text-right min-w-[280px] whitespace-nowrap sticky right-0 bg-slate-50/95 backdrop-blur-sm shadow-l z-10">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1177,7 +1067,7 @@ export default function ManageStudents() {
         onClose={() => setFinesModalOpen(false)}
         title="Campus Disciplinary Fines & Overdue Penalties Ledger"
         subtitle="Review late fee assessments, waive penalties, or issue disciplinary citations"
-        maxWidth="max-w-7xl"
+        maxWidth="max-w-6xl"
       >
         <div className="space-y-6">
           
@@ -1246,12 +1136,8 @@ export default function ManageStudents() {
             ))}
           </div>
 
-          {/* Slide Navigation Strip for Fines Ledger */}
-          {/* Fines Table */}
-          <div 
-            ref={setFinesTableRef}
-            className="max-h-[480px] overflow-auto border border-slate-200 rounded-2xl custom-scrollbar cursor-grab active:cursor-grabbing select-none"
-          >
+          {/* Fines Table - Silky Smooth Vertical & Horizontal Scroll */}
+          <div className="max-h-[500px] overflow-y-auto overflow-x-auto border border-slate-200 rounded-2xl custom-scrollbar scroll-smooth overscroll-contain">
             {finesLoading ? (
               <div className="p-8 text-center text-xs text-slate-400">
                 <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -1262,15 +1148,15 @@ export default function ManageStudents() {
                 No fines or infractions recorded on campus.
               </div>
             ) : (
-              <table className="w-full text-left text-xs min-w-[1300px]">
+              <table className="w-full text-left text-xs min-w-[980px]">
                 <thead className="bg-slate-50 text-slate-500 uppercase font-bold tracking-wider border-b border-slate-200 sticky top-0 z-10">
                   <tr>
-                    <th className="py-3 px-4 min-w-[240px] whitespace-nowrap">Student Resident</th>
-                    <th className="py-3 px-4 min-w-[280px]">Infraction / Reason</th>
-                    <th className="py-3 px-4 min-w-[140px] whitespace-nowrap">Violation Type</th>
-                    <th className="py-3 px-4 min-w-[120px] whitespace-nowrap text-right">Penalty</th>
-                    <th className="py-3 px-4 min-w-[120px] whitespace-nowrap text-center">Ledger Status</th>
-                    <th className="py-3 px-4 min-w-[240px] whitespace-nowrap text-right sticky right-0 bg-slate-50/95 backdrop-blur-sm shadow-l">Action</th>
+                    <th className="py-3 px-4 min-w-[220px] whitespace-nowrap">Student Resident</th>
+                    <th className="py-3 px-4 min-w-[240px]">Infraction / Reason</th>
+                    <th className="py-3 px-4 min-w-[130px] whitespace-nowrap">Violation Type</th>
+                    <th className="py-3 px-4 min-w-[110px] whitespace-nowrap text-right">Penalty</th>
+                    <th className="py-3 px-4 min-w-[110px] whitespace-nowrap text-center">Ledger Status</th>
+                    <th className="py-3 px-4 min-w-[220px] whitespace-nowrap text-right sticky right-0 bg-slate-50/95 backdrop-blur-sm shadow-l">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1283,13 +1169,13 @@ export default function ManageStudents() {
                     })
                     .map(fine => (
                       <tr key={fine.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-3.5 px-4 min-w-[240px]">
+                        <td className="py-3.5 px-4 min-w-[220px]">
                           <strong className="text-slate-900 block font-black text-xs whitespace-nowrap">{fine.student_name}</strong>
                           <span className="text-[11px] text-slate-500 font-mono whitespace-nowrap">
                             {fine.roll_number} • {fine.room_number || 'Room TBD'}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 min-w-[280px] text-slate-700">
+                        <td className="py-3.5 px-4 min-w-[240px] text-slate-700">
                           <span className="font-semibold text-xs leading-relaxed block">{fine.reason}</span>
                           {fine.days_overdue > 0 && (
                             <span className="inline-block text-[10px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 mt-1">
@@ -1297,7 +1183,7 @@ export default function ManageStudents() {
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 min-w-[140px] whitespace-nowrap">
+                        <td className="py-3.5 px-4 min-w-[130px] whitespace-nowrap">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
                             fine.type === 'Late Fee'
                               ? 'bg-rose-100 text-rose-800 border border-rose-200'
@@ -1308,10 +1194,10 @@ export default function ManageStudents() {
                             {fine.type}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 min-w-[120px] whitespace-nowrap text-right font-mono font-black text-rose-600 text-sm">
+                        <td className="py-3.5 px-4 min-w-[110px] whitespace-nowrap text-right font-mono font-black text-rose-600 text-sm">
                           ₹{Number(fine.amount).toLocaleString()}
                         </td>
-                        <td className="py-3.5 px-4 min-w-[120px] whitespace-nowrap text-center">
+                        <td className="py-3.5 px-4 min-w-[110px] whitespace-nowrap text-center">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
                             fine.status === 'Paid'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
@@ -1322,7 +1208,7 @@ export default function ManageStudents() {
                             {fine.status}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 min-w-[240px] whitespace-nowrap text-right sticky right-0 bg-white/95 backdrop-blur-sm shadow-l">
+                        <td className="py-3.5 px-4 min-w-[220px] whitespace-nowrap text-right sticky right-0 bg-white/95 backdrop-blur-sm shadow-l">
                           {fine.status === 'Unpaid' ? (
                             <div className="flex items-center justify-end gap-2">
                               <button
