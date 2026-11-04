@@ -566,11 +566,11 @@ export default function StudentFees() {
               <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
                 {pendingAmount <= 0 ? (
                   <>
-                    Aapki semester fees <strong>fully paid (100% settled)</strong> hai! Meal skip karne par jama hua rebate amount aapke account me <strong>Advance Cash Credit</strong> ke roop me jama ho raha hai. Yeh balance hostel checkout par <strong>Direct Bank Refund</strong> ke zariye ya agle semester ki fees me <strong>Advance Adjustment</strong> ke roop me deduct hoga.
+                    Your semester residential and dining charges are <strong>fully settled (100% Cleared)</strong>. Rebates accrued from your registered meal absences are actively credited to your resident account as <strong>Surplus Financial Advance</strong>. This balance will automatically be adjusted as an upfront discount against your next semester fee invoice, or disbursed via <strong>Direct Bank Electronic Refund</strong> upon official hostel checkout clearance.
                   </>
                 ) : (
                   <>
-                    Aapke registered meal absences ka rebate seedha pending fees me se deduct ho raha hai. Fees fully clear hone ke baad additional rebates yahan <strong>Refundable Advance Balance</strong> ban kar jama honge.
+                    Rebates from your registered meal absences are automatically credited against your outstanding semester fee dues. Once your account is 100% settled, all additional meal skip savings will accumulate here as an <strong>Advance Refundable Ledger Balance</strong>.
                   </>
                 )}
               </p>
