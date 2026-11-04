@@ -98,6 +98,32 @@ export async function getMyFees(req, res) {
     // Get all fines for this student (Late fee, Curfew, Damage, etc.)
     const studentFines = await all('SELECT * FROM fines WHERE student_id = ? ORDER BY created_at DESC', [student.id]);
 
+    // Calculate meal absence rebates & advance balance
+    let mealRebate = {
+      totalRebate: 0,
+      absencesCount: 0,
+      advanceRebateBalance: 0,
+      isFullyPaid: false,
+      recentAbsences: []
+    };
+    try {
+      const absences = await all(
+        'SELECT id, date, meal_type, rebate_amount, reason, created_at FROM meal_absences WHERE student_id = ? ORDER BY date DESC',
+        [student.id]
+      );
+      const totalRebate = absences.reduce((sum, a) => sum + (Number(a.rebate_amount) || 0), 0);
+      const isFullyPaid = fee.status === 'Paid' || (fee.pending_amount || 0) <= 0;
+      mealRebate = {
+        totalRebate,
+        absencesCount: absences.length,
+        advanceRebateBalance: isFullyPaid ? totalRebate : 0,
+        isFullyPaid,
+        recentAbsences: absences.slice(0, 5)
+      };
+    } catch (e) {
+      console.error('Error calculating meal rebates:', e);
+    }
+
     res.json({
       success: true,
       fee,
@@ -106,6 +132,7 @@ export async function getMyFees(req, res) {
       fines: studentFines || [],
       studentName: req.user.name,
       studentEmail: req.user.email,
+      mealRebate,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

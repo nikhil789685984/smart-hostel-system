@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../services/api';
 import Modal from '../../components/ui/Modal';
@@ -31,7 +32,8 @@ import {
   DoorOpen,
   LogOut,
   AlertCircle,
-  Calendar
+  Calendar,
+  Utensils
 } from 'lucide-react';
 
 export default function StudentFees() {
@@ -342,7 +344,7 @@ export default function StudentFees() {
     );
   }
 
-  const { fee, breakdown = [], transactions = [], studentName } = feeData || {};
+  const { fee, breakdown = [], transactions = [], studentName, mealRebate } = feeData || {};
   const totalAmount = fee?.total_amount || 45000;
   const paidAmount = fee?.paid_amount || 0;
   const pendingAmount = fee?.pending_amount !== undefined ? fee.pending_amount : (totalAmount - paidAmount);
@@ -536,6 +538,71 @@ export default function StudentFees() {
         </motion.div>
       )}
 
+      {/* Advance Mess Rebate Balance Card (Option B) */}
+      {(fee?.status === 'Paid' || pendingAmount <= 0 || (mealRebate && mealRebate.totalRebate > 0)) && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-6 rounded-3xl bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 border-2 border-emerald-500/40 shadow-xl text-white relative overflow-hidden"
+        >
+          <div className="absolute -right-8 -bottom-8 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                  <Utensils className="w-3.5 h-3.5 text-emerald-400" />
+                  {pendingAmount <= 0 ? 'Fees 100% Cleared • Advance Credit Active' : 'Zero-Waste Mess Savings Active'}
+                </span>
+                <span className="text-[11px] font-bold text-emerald-200/70">
+                  {mealRebate?.absencesCount || 0} Registered Meal Absence{mealRebate?.absencesCount === 1 ? '' : 's'}
+                </span>
+              </div>
+              
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+                Advance Mess Rebate Balance
+              </h3>
+              
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                {pendingAmount <= 0 ? (
+                  <>
+                    Aapki semester fees <strong>fully paid (100% settled)</strong> hai! Meal skip karne par jama hua rebate amount aapke account me <strong>Advance Cash Credit</strong> ke roop me jama ho raha hai. Yeh balance hostel checkout par <strong>Direct Bank Refund</strong> ke zariye ya agle semester ki fees me <strong>Advance Adjustment</strong> ke roop me deduct hoga.
+                  </>
+                ) : (
+                  <>
+                    Aapke registered meal absences ka rebate seedha pending fees me se deduct ho raha hai. Fees fully clear hone ke baad additional rebates yahan <strong>Refundable Advance Balance</strong> ban kar jama honge.
+                  </>
+                )}
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-semibold text-emerald-300/90">
+                <span className="bg-white/10 px-2.5 py-1 rounded-lg backdrop-blur-sm">🍳 Breakfast: +₹40</span>
+                <span className="bg-white/10 px-2.5 py-1 rounded-lg backdrop-blur-sm">🍱 Lunch: +₹65</span>
+                <span className="bg-white/10 px-2.5 py-1 rounded-lg backdrop-blur-sm">🍲 Dinner: +₹65</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-start md:items-end gap-2 bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/15 shrink-0 self-stretch md:self-auto min-w-[240px]">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                {pendingAmount <= 0 ? 'Refundable Advance Balance' : 'Total Rebate Earned'}
+              </span>
+              <p className="text-3xl font-black text-emerald-400 font-mono">
+                ₹{Number(mealRebate?.totalRebate || 0).toLocaleString()}
+              </p>
+              <span className="text-[10px] text-slate-300 font-medium">
+                {pendingAmount <= 0 ? '✓ Refundable at Checkout / Next Sem' : '✓ Applied against semester dues'}
+              </span>
+              <Link
+                to="/student/mess"
+                className="mt-2 w-full justify-center px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95"
+              >
+                <Utensils className="w-3.5 h-3.5" /> Manage Meal Absences
+              </Link>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Progress & Financial Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <motion.div
@@ -714,8 +781,16 @@ export default function StudentFees() {
 
           /* APPLY FORM (WHEN DUES === 0) */
           <form onSubmit={handleSubmitCheckout} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-            <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs bg-emerald-100/70 px-3 py-1.5 rounded-xl border border-emerald-200 w-fit">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Zero Dues Confirmed (₹0 Balance). You are eligible to apply.
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs bg-emerald-100/70 px-3 py-1.5 rounded-xl border border-emerald-200 w-fit">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Zero Dues Confirmed (₹0 Balance). You are eligible to apply.
+              </div>
+              {mealRebate?.totalRebate > 0 && (
+                <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-300 w-fit">
+                  <span>💰 Refundable Mess Rebate Balance: <strong>+₹{Number(mealRebate.totalRebate).toLocaleString()}</strong></span>
+                  <span className="text-[9px] font-black uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded">Bank Refund</span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
