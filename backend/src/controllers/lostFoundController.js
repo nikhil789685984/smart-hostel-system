@@ -55,6 +55,35 @@ export async function getAllItems(req, res) {
   }
 }
 
+function normalizeImageUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  let cleanUrl = url.trim();
+  if (!cleanUrl) return null;
+
+  // Handle Google Drive links
+  // Converts to direct CDN viewable URL: https://lh3.googleusercontent.com/d/{id}
+  const driveMatch = cleanUrl.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=view&)?id=)([a-zA-Z0-9_-]+)/);
+  if (driveMatch && driveMatch[1]) {
+    return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+  }
+
+  // Handle Dropbox links (force direct raw download)
+  if (cleanUrl.includes('dropbox.com')) {
+    cleanUrl = cleanUrl.replace('?dl=0', '?raw=1').replace('&dl=0', '&raw=1');
+    if (!cleanUrl.includes('raw=1')) {
+      cleanUrl += cleanUrl.includes('?') ? '&raw=1' : '?raw=1';
+    }
+    return cleanUrl;
+  }
+
+  // Prepend https:// if protocol is missing
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.startsWith('/uploads/')) {
+    cleanUrl = `https://${cleanUrl}`;
+  }
+
+  return cleanUrl;
+}
+
 export async function reportItem(req, res) {
   try {
     const { type, item_name, category, description, location, image_url } = req.body;
@@ -64,10 +93,12 @@ export async function reportItem(req, res) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
 
+    const cleanImageUrl = normalizeImageUrl(image_url);
+
     await run(`
       INSERT INTO lost_found_items (type, item_name, category, description, location, image_url, reported_by_user_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [type, item_name, category, description, location, image_url, reported_by_user_id]);
+    `, [type, item_name, category, description, location, cleanImageUrl, reported_by_user_id]);
 
     
     try {

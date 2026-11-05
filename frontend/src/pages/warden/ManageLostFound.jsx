@@ -71,6 +71,24 @@ export default function ManageLostFound() {
                       <span className="font-bold text-amber-800 uppercase text-xs tracking-wider">CLAIM PENDING</span>
                       <span className="text-xs text-amber-600 font-bold">{item.category}</span>
                     </div>
+                    {item.image_url && (
+                      <div className="w-full h-40 bg-slate-100 overflow-hidden relative">
+                        <img 
+                          src={item.image_url} 
+                          alt={item.item_name}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          className="w-full h-full object-cover" 
+                        />
+                        <a 
+                          href={item.image_url} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold rounded flex items-center gap-1 hover:bg-black/80"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Full Photo
+                        </a>
+                      </div>
+                    )}
                     <div className="p-5 flex-1">
                       <h3 className="font-bold text-lg text-slate-800 mb-1">{item.item_name}</h3>
                       <p className="text-sm text-slate-500 mb-4">Found at {item.location}</p>
@@ -117,8 +135,26 @@ export default function ManageLostFound() {
                   {activeItems.map(item => (
                     <tr key={item.id} className="hover:bg-slate-50">
                       <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800">{item.item_name}</p>
-                        <p className="text-xs text-slate-500">{item.category}</p>
+                        <div className="flex items-center gap-3">
+                          {item.image_url ? (
+                            <a href={item.image_url} target="_blank" rel="noreferrer" className="shrink-0" title="Click to view photo">
+                              <img 
+                                src={item.image_url} 
+                                alt={item.item_name} 
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                className="w-10 h-10 rounded-lg object-cover border border-slate-200 hover:scale-105 transition-transform" 
+                              />
+                            </a>
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                              <PackageSearch className="w-5 h-5 text-slate-300" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-bold text-slate-800">{item.item_name}</p>
+                            <p className="text-xs text-slate-500">{item.category}</p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider ${item.type === 'FOUND' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
